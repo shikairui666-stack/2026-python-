@@ -77,7 +77,14 @@ def get_artist_songs(artist_id,limit=25):
         return songs
     except:
         return []#防止崩溃
-test_artist_id=166009
-res_artist=get_artist_info(test_artist_id)
-print("artist_id=",test_artist_id)
-print(res_artist)
+#图片下载和存储
+def download_image(img_url,save_path):
+    if os.path.exists(save_path):
+        return
+    #防重
+    try:
+        r=requests.get(img_url,headers=headers,timeout=15)
+        with open(save_path,"wb") as f:
+            f.write(r.content)
+    except:
+        print("图片下载失败")
