@@ -23,15 +23,15 @@ def create_folders():
     os.makedirs(path3,exist_ok=True)
 
 def clean_lrc(raw):
-    raw=re.sub(r'\[.*?\]', '',raw)#正则去掉歌词里带的[]时间部分，不采用贪婪策略
-    lines=[line.strip() for line in raw.splitlines() if line.strip()] #过滤空行
+    raw=re.sub(r'\[.*?\]', '',raw) #正则去掉歌词里带的[]时间部分，不采用贪婪策略，保证全部过滤掉
+    lines=[line.strip() for line in raw.splitlines() if line.strip()] #过滤空行，保持美观
     return "\n".join(lines)
 
 def get_lyrics(song_id):
     url=api_base+"/song/lyric"  #这里为了获取该歌曲的url地址
     params={"id":song_id,"lv":1,"tv":-1} #关闭翻译
     try:
-        r=requests.get(url,headers=headers,params=params,timeout=10)#超过十秒即失败
+        r=requests.get(url,headers=headers,params=params,timeout=10)  #超过十秒即判定为请求失败
         data=r.json()
         if "lrc" in data and "lyric" in data["lrc"]:
             return clean_lrc(data["lrc"]["lyric"])
@@ -39,6 +39,18 @@ def get_lyrics(song_id):
     except:
         return "歌词获取失败"
 
-create_folders()
-lyric = get_lyrics(208378) #七里香id测试
-print(lyric)
+def get_artist_info(artist_id): #这里同理
+    url=api_base+"/artist/desc"
+    params={"id":artist_id}
+    try:
+        r=requests.get(url,headers=headers,params=params,timeout=10) #111
+        data=r.json()
+        return {
+            "id":artist_id,
+            "name":data["artist"]["name"],
+            "picurl":data["artist"]["picUrl"],
+            "jianjie":data.get("briefDesc","暂无简介"),
+            "url":"https://music.163.com/#/artist?id="+str(artist_id)
+        }
+    except:
+        return None
