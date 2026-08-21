@@ -42,38 +42,41 @@ def get_lyrics(song_id):
     
 #歌手部分，获取名字，简介，图片，url
 def get_artist_info(artist_id): #这里同理
-    url=api_base+"/artist/desc"
-    params={"id":artist_id}
+    url="https://music.163.com/api/v1/artist/"+str(artist_id)
     try:
-        r=requests.get(url,headers=headers,params=params,timeout=15) #111
+        r=requests.get(url,headers=headers,timeout=15) #111
         data=r.json()
+        artist=data["artist"]
         return{
             "id":artist_id,
-            "name":data["artist"]["name"],
-            "picurl":data["artist"]["picUrl"],
-            "jianjie":data.get("briefDesc","暂无简介"),
+            "name":artist["name"],
+            "picurl":artist["picUrl"],
+            "jianjie":artist.get("briefDesc","暂无简介"),
             "url":"https://music.163.com/#/artist?id="+str(artist_id)
         }
     except:
         return None
 #一个歌手25首歌曲
-def get_artist_songs(artist_id, limit=25):
+def get_artist_songs(artist_id,limit=25):
     url=api_base+"/artist/top/song"
     params={"id":artist_id,"limit":limit}
     try:
         r=requests.get(url,headers=headers,params=params,timeout=15)
         data=r.json()
         songs=[]#放空
-        for item in data.get("songs",[]):
+        for item in data.get("songs",[])[:limit]:
             songs.append({
                 "id":item["id"],
                 "name":item["name"],
                 "artist_id":artist_id,
-                "artist_name":item["artists"][0]["name"],
-                "album":item["album"]["name"],
-                "cover":item["album"]["picUrl"],
+                "artist_name":item["ar"][0]["name"],
+                "album":item["al"]["name"],
+                "cover":item["al"]["picUrl"],
                 "url":"https://music.163.com/#/song?id="+str(item["id"])
             })
         return songs
     except:
         return []#防止崩溃
+test_artist_id=166009
+res_songs=get_artist_songs(test_artist_id,limit=5)
+print(res_songs)
