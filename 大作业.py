@@ -6,8 +6,8 @@ import json       #保存数据为json格式
 import time       #用来让程序暂停一下
 import random     #用来生成随机数，让暂停时间不固定
 #爬虫伪装
-heads = {
-    "User-Agent":"Mozilla/5.0(Windows NT 10.0;Win64;x64) AppleWebKit/537.36(KHTML,like Gecko) Chrome/120.0.0.0 Safari/537.36",
+headers = {
+    "User-Agent":"Mozilla/5.0 (Windows NT 10.0;Win64;x64) AppleWebKit/537.36 (KHTML,like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Referer":"https://music.163.com/"
 }
 #网易云音乐API
@@ -21,6 +21,24 @@ def create_folders():
     os.makedirs(path1,exist_ok=True)
     os.makedirs(path2,exist_ok=True)
     os.makedirs(path3,exist_ok=True)
-    print("success")
+
+def clean_lrc(raw):
+    raw=re.sub(r'\[.*?\]', '',raw)#正则去掉歌词里带的[]时间部分，不采用贪婪策略
+    lines=[line.strip() for line in raw.splitlines() if line.strip()] #过滤空行
+    return "\n".join(lines)
+
+def get_lyrics(song_id):
+    url=api_base+"/song/lyric"  #这里为了获取该歌曲的url地址
+    params={"id":song_id,"lv":1,"tv":-1} #关闭翻译
+    try:
+        r=requests.get(url,headers=headers,params=params,timeout=10)#超过十秒即失败
+        data=r.json()
+        if "lrc" in data and "lyric" in data["lrc"]:
+            return clean_lrc(data["lrc"]["lyric"])
+        return "暂无歌词"
+    except:
+        return "歌词获取失败"
 
 create_folders()
+lyric = get_lyrics(208378) #七里香id测试
+print(lyric)
