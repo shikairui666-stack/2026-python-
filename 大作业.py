@@ -14,12 +14,13 @@ heads = {
 api_base = "https://music.163.com/api"
 #函数1：创建文件夹用于后续保存
 def create_folders():
-    path1 = "music_data/images"
-    path2 = "music_data/singer_head"
-    path3 = "music_data/lyrics"
-    os.makedirs(path1, exist_ok=True)
-    os.makedirs(path2, exist_ok=True)
-    os.makedirs(path3, exist_ok=True)
+    base_dir=os.path.dirname(os.path.abspath(__file__))
+    path1=os.path.join(base_dir,"music_data","images")
+    path2=os.path.join(base_dir,"music_data","singer_head")
+    path3=os.path.join(base_dir,"music_data","lyrics")
+    os.makedirs(path1,exist_ok=True)
+    os.makedirs(path2,exist_ok=True)
+    os.makedirs(path3,exist_ok=True)
     print("success")
 
 create_folders()
