@@ -78,5 +78,6 @@ def get_artist_songs(artist_id,limit=25):
     except:
         return []#防止崩溃
 test_artist_id=166009
-res_songs=get_artist_songs(test_artist_id,limit=5)
-print(res_songs)
+res_artist=get_artist_info(test_artist_id)
+print("artist_id=",test_artist_id)
+print(res_artist)
