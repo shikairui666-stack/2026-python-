@@ -88,3 +88,135 @@ def download_image(img_url,save_path):
             f.write(r.content)
     except:
         print("图片下载失败")
+
+#main函数
+create_folders()
+singer_ids=[
+    6452,#周杰伦
+    3684,#林俊杰
+    2116,#陈奕迅
+    6460,#张学友
+    5781,#薛之谦
+    29051613,#郑润泽
+    5538,#汪苏泷
+    31376161,#颜人中
+    12631485,#h3r3
+    4292,#李荣浩
+    5771,#许嵩
+    2738,#方大同
+    5196,#陶喆
+    1143033,#队长
+    6472,#张杰
+    12138269,#毛不易
+    5929,#徐良
+    6731,#赵雷
+    1132392,#马思唯
+    1030001,#周深
+    5346,
+    3066,
+    861777,
+    2843,
+    1038093,
+    12932368,
+    3695,
+    9272,
+    7763,
+    8926,
+    7214,
+    8325,
+    1007170,
+    9621,
+    9269,
+    29802127,
+    10562,
+    14312549,
+    7219,
+    9606,
+    9945,
+    10561,
+    59655434,
+    906118,
+    10559,
+    8234,
+    30471229,
+    9178,
+    7891,
+    9489,
+    12172529,
+    9061,
+    7570,
+    10558,
+    35531,
+    185858,
+    90331,
+    178059,
+    12107961,
+    33184,
+    38853,
+    1045123,
+    780003,
+    301757,
+    45236,
+    44266,
+    64147,
+    11972054,
+    74625,
+    1043338,
+    46487,
+    14486166,
+    14621097,
+    159300,
+    159692,
+    16456,
+    13193,
+    51265187,
+    11127,
+    12676697,
+    12707,
+    11564,
+    222871,
+    189873,
+    12977,
+    11265,
+    1047337,
+    33806754,
+    12712,
+    11015,
+    12081,
+    847346,
+    96266,
+    94779,
+    98105,
+    747030,
+    12068017,
+    759509,
+    126339,
+    37351063
+]
+total_songs=[]
+for singer_id in singer_ids:
+    singer=get_artist_info(singer_id)
+    if singer==None:
+        continue
+    else:
+        touxiang_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","singer_head",str(singer_id)+".jpg")
+        download_image(singer["picurl"], touxiang_path)
+        singer["local_avatar"]=touxiang_path
+        gequ_list=get_artist_songs(singer_id,limit=25)
+        for gequ in gequ_list:
+            lrc=get_lyrics(gequ["id"])
+            gequ["lyric"]=lrc
+            lrc_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","lyrics",str(gequ["id"])+"_"+gequ["name"]+".txt")
+            with open(lrc_path,"w",encoding="utf-8") as f:
+                f.write(lrc)
+            fengmian_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","images",str(gequ["id"])+".jpg")
+            download_image(gequ["cover"],fengmian_path)
+            gequ["local_cover"]=fengmian_path
+            gequ["artist_detail"]=singer
+            total_songs.append(gequ)
+            time.sleep(random.uniform(3,6))
+        time.sleep(random.uniform(10,15))
+
+json_save_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","songs_full_data.json")
+with open(json_save_path, "w", encoding="utf-8") as f:
+    json.dump(total_songs,f,ensure_ascii=False,indent=2)
