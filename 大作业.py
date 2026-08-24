@@ -22,6 +22,10 @@ def create_folders():
     os.makedirs(path2,exist_ok=True)
     os.makedirs(path3,exist_ok=True)
 #歌词部分
+def safe_filename(name):
+    #2026.8.24爬取马思维歌曲出错，文件名不满足规范要求
+    return re.sub(r'[\\/:*?"<>|]', '_', name)
+
 def clean_lrc(raw):
     raw=re.sub(r'\[.*?\]', '',raw) #正则去掉歌词里带的[]时间部分，不采用贪婪策略，保证全部过滤掉
     lines=[line.strip() for line in raw.splitlines() if line.strip()] #过滤空行，保持美观
@@ -32,11 +36,14 @@ def get_lyrics(song_id):
     params={"id":song_id,"lv":1,"tv":-1} #关闭翻译
     try:
         r=requests.get(url,headers=headers,params=params,timeout=15)  #延长秒数
+        r.raise_for_status()  #4xx/5xx
         data=r.json()
-        if "lrc" in data and "lyric" in data["lrc"]:
-            return clean_lrc(data["lrc"]["lyric"])
+        lyric=data.get("lrc",{}).get("lyric") if isinstance(data,dict) else None
+        if lyric:
+            return clean_lrc(lyric)
         return "暂无歌词"
-    except:
+    except Exception as e:
+        print(f"[歌词] id={song_id} 获取失败: {e}")
         return "歌词获取失败"
 
     
@@ -45,16 +52,18 @@ def get_artist_info(artist_id): #这里同理
     url="https://music.163.com/api/v1/artist/"+str(artist_id)
     try:
         r=requests.get(url,headers=headers,timeout=15) #111
+        r.raise_for_status()
         data=r.json()
         artist=data["artist"]
         return{
             "id":artist_id,
-            "name":artist["name"],
-            "picurl":artist["picUrl"],
+            "name":artist.get("name",""),
+            "picurl":artist.get("picUrl",""),
             "jianjie":artist.get("briefDesc","暂无简介"),
             "url":"https://music.163.com/#/artist?id="+str(artist_id)
         }
-    except:
+    except Exception as e:
+        print(f"[歌手] id={artist_id} 获取失败: {e}")
         return None
 #一个歌手25首歌曲
 def get_artist_songs(artist_id,limit=25):
@@ -62,32 +71,43 @@ def get_artist_songs(artist_id,limit=25):
     params={"id":artist_id,"limit":limit}
     try:
         r=requests.get(url,headers=headers,params=params,timeout=15)
+        r.raise_for_status()
         data=r.json()
         songs=[]#放空
         for item in data.get("songs",[])[:limit]:
-            songs.append({
-                "id":item["id"],
-                "name":item["name"],
-                "artist_id":artist_id,
-                "artist_name":item["ar"][0]["name"],
-                "album":item["al"]["name"],
-                "cover":item["al"]["picUrl"],
-                "url":"https://music.163.com/#/song?id="+str(item["id"])
-            })
+            try:
+                ar=item.get("ar") or []
+                al=item.get("al") or {}
+                songs.append({
+                    "id":item["id"],
+                    "name":item.get("name",""),
+                    "artist_id":artist_id,
+                    "artist_name":ar[0].get("name","") if ar else "",
+                    "album":al.get("name",""),
+                    "cover":al.get("picUrl",""),
+                    "url":"https://music.163.com/#/song?id="+str(item["id"])
+                })
+            except Exception as e:
+                print(f"[歌曲] id={item.get('id')} 跳过: {e}")
+                continue
         return songs
-    except:
+    except Exception as e:
+        print(f"[歌曲列表] artist_id={artist_id} 获取失败: {e}")
         return []#防止崩溃
 #图片下载和存储
 def download_image(img_url,save_path):
+    if not img_url or not isinstance(img_url,str):
+        return
     if os.path.exists(save_path):
         return
     #防重
     try:
         r=requests.get(img_url,headers=headers,timeout=15)
+        r.raise_for_status()
         with open(save_path,"wb") as f:
             f.write(r.content)
-    except:
-        print("图片下载失败")
+    except Exception as e:
+        print(f"[图片] {save_path} 下载失败: {e}")
 
 #main函数
 create_folders()
@@ -194,6 +214,15 @@ singer_ids=[
     37351063
 ]
 total_songs=[]
+json_save_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","songs_full_data.json")
+def save_data():
+    #为了防止失败不保存
+    try:
+        with open(json_save_path,"w",encoding="utf-8") as f:
+            json.dump(total_songs,f,ensure_ascii=False,indent=2)
+    except Exception as e:
+        print(f"保存但是失败: {e}")
+
 for singer_id in singer_ids:
     singer=get_artist_info(singer_id)
     if singer==None:
@@ -206,7 +235,7 @@ for singer_id in singer_ids:
         for gequ in gequ_list:
             lrc=get_lyrics(gequ["id"])
             gequ["lyric"]=lrc
-            lrc_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","lyrics",str(gequ["id"])+"_"+gequ["name"]+".txt")
+            lrc_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","lyrics",str(gequ["id"])+"_"+safe_filename(gequ["name"])+".txt")
             with open(lrc_path,"w",encoding="utf-8") as f:
                 f.write(lrc)
             fengmian_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","images",str(gequ["id"])+".jpg")
@@ -216,7 +245,4 @@ for singer_id in singer_ids:
             total_songs.append(gequ)
             time.sleep(random.uniform(3,6))
         time.sleep(random.uniform(10,15))
-
-json_save_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","songs_full_data.json")
-with open(json_save_path, "w", encoding="utf-8") as f:
-    json.dump(total_songs,f,ensure_ascii=False,indent=2)
+        save_data()
