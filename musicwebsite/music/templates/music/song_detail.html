@@ -1,0 +1,33 @@
+{% extends 'music/base.html' %}
+
+{% block title %}{{ song.name }}{% endblock %}
+
+{% block content %}
+<h1>{{ song.name }}</h1>
+<img src="{{ song.image_url }}" width="200" alt="{{ song.name }}">
+<p>歌手：<a href="{% url 'artist_detail' song.artist.id %}">{{ song.artist.name }}</a></p>
+<p>原始网站：<a href="{{ song.url }}" target="_blank">{{ song.url }}</a></p>
+
+<h2>歌词</h2>
+<pre>{{ song.lyric }}</pre>
+
+<h2>评论</h2>
+{% for comment in comments %}
+    <p>
+        {{ comment.content }}<br>
+        <small>{{ comment.created_at|date:"Y-m-d H:i" }}</small>
+        <form method="post" action="{% url 'delete_comment' comment.id %}">
+            {% csrf_token %}
+            <button>删除</button>
+        </form>
+    </p>
+{% empty %}
+    <p>暂无评论</p>
+{% endfor %}
+
+<form method="post" action="{% url 'add_comment' song.id %}">
+    {% csrf_token %}
+    <textarea name="content" required></textarea>
+    <button>发表评论</button>
+</form>
+{% endblock %}

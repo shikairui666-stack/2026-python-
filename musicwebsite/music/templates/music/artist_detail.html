@@ -1,0 +1,24 @@
+{% extends 'music/base.html' %}
+
+{% block title %}{{ artist.name }}{% endblock %}
+
+{% block content %}
+<h1>{{ artist.name }}</h1>
+<img src="{{ artist.image_url }}" width="200" alt="{{ artist.name }}">
+<p>原始网站：<a href="{{ artist.url }}" target="_blank">{{ artist.url }}</a></p>
+
+<h2>简介</h2>
+<p>{{ artist.brief }}</p>
+
+<h2>歌曲</h2>
+<ul>
+{% for song in songs %}
+    <li>
+        <a href="{% url 'song_detail' song.id %}">
+            <img src="{{ song.image_url }}" width="80" alt="{{ song.name }}">
+            {{ song.name }}
+        </a>
+    </li>
+{% endfor %}
+</ul>
+{% endblock %}
