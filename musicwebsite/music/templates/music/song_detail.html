@@ -4,9 +4,11 @@
 
 {% block content %}
 <h1>{{ song.name }}</h1>
-<img src="{{ song.image_url }}" width="200" alt="{{ song.name }}">
-<p>歌手：<a href="{% url 'artist_detail' song.artist.id %}">{{ song.artist.name }}</a></p>
-<p>原始网站：<a href="{{ song.url }}" target="_blank">{{ song.url }}</a></p>
+<div class="detail-box">
+    <img src="{{ song.image_url }}" width="200" alt="{{ song.name }}">
+    <p>歌手：<a href="{% url 'artist_detail' song.artist.id %}">{{ song.artist.name }}</a></p>
+    <p>原始网站：<a href="{{ song.url }}" target="_blank">{{ song.url }}</a></p>
+</div>
 
 <h2>歌词</h2>
 <pre>{{ song.lyric }}</pre>
@@ -16,9 +18,9 @@
     <p>
         {{ comment.content }}<br>
         <small>{{ comment.created_at|date:"Y-m-d H:i" }}</small>
-        <form method="post" action="{% url 'delete_comment' comment.id %}">
+        <form method="post" action="{% url 'delete_comment' comment.id %}" onsubmit="return confirm('确定删除这条评论吗？');">
             {% csrf_token %}
-            <button>删除</button>
+            <button type="submit">删除</button>
         </form>
     </p>
 {% empty %}
@@ -27,7 +29,17 @@
 
 <form method="post" action="{% url 'add_comment' song.id %}">
     {% csrf_token %}
-    <textarea name="content" required></textarea>
-    <button>发表评论</button>
+    <label>评论：
+        <textarea name="content" id="comment-input" required oninput="countChars()"></textarea>
+    </label>
+    <p>已输入 <b id="count">0</b> 字</p>
+    <button type="submit">发表评论</button>
 </form>
+
+<script>
+function countChars(){
+    var text=document.getElementById("comment-input").value;
+    document.getElementById("count").innerHTML=text.length;
+}
+</script>
 {% endblock %}

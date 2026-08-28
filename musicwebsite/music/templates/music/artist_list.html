@@ -4,7 +4,7 @@
 
 {% block content %}
 <h1>歌手列表</h1>
-<ul>
+<ul class="song-list">
 {% for artist in page_obj %}
     <li>
         <a href="{% url 'artist_detail' artist.id %}">
@@ -28,8 +28,10 @@
     <a href="?page={{ page_obj.paginator.num_pages }}">尾页</a>
 {% endif %}
 <form method="get">
-    <input type="number" name="page" min="1" placeholder="页码">
-    <button>跳转</button>
+    <label>页码：
+        <input type="number" name="page" min="1" placeholder="页码">
+    </label>
+    <button type="submit">跳转</button>
 </form>
 </div>
 {% endblock %}

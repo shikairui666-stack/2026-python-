@@ -3,15 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <title>{% block title %}音乐网站{% endblock %}</title>
+    <style>
+        body{max-width:900px;margin:0 auto;padding:20px;background:linear-gradient(to bottom right,lightblue,white);}
+        li{margin:8px 0;}
+        img{vertical-align:middle;}
+        a{color:rgb(92,158,233);text-decoration:none;}
+        a:hover{text-decoration:underline;}
+        button{padding:4px 14px;cursor:pointer;border:1px solid gray;background:white;border-radius:4px;}
+        button:hover{background:lightgray;}
+        input,textarea{padding:4px 8px;border:1px solid lightgray;border-radius:4px;}
+        pre{background:whitesmoke;padding:12px;border:1px solid lightgray;border-radius:4px;}
+        h1,h2{color:darkblue;}
+        h1{border-bottom:1px solid lightgray;padding-bottom:5px;}
+        .song-list{list-style:none;padding:0;}
+        .song-list li{border:1px solid lightgray;padding:10px;margin:8px 0;background:white;}
+        .song-list li:hover{border-color:blue;}
+        .detail-box{border:1px solid lightgray;padding:10px;margin:8px 0;background:white;}
+    </style>
 </head>
 <body>
-    <a href="{% url 'song_list' %}">歌曲列表</a> |
+    <a href="{% url 'song_list' %}">歌曲列表</a>
     <a href="{% url 'artist_list' %}">歌手列表</a>
     <form action="{% url 'search' %}" method="get">
-        <input type="text" name="q" maxlength="20" placeholder="搜索关键词">
+        <label>搜索：
+            <input type="text" name="q" maxlength="20" placeholder="搜索关键词">
+        </label>
         <label><input type="radio" name="type" value="song" checked>歌曲</label>
         <label><input type="radio" name="type" value="artist">歌手</label>
-        <button>搜索</button>
+        <button type="submit">搜索</button>
     </form>
     <hr>
     {% block content %}{% endblock %}

@@ -26,4 +26,4 @@ class Comment(models.Model):
     created_at=models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return self.content[:10086]
+        return self.content[:1008611]
