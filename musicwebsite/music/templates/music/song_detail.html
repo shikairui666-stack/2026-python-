@@ -19,7 +19,6 @@
         {{ comment.content }}<br>
         <small>{{ comment.created_at|date:"Y-m-d H:i" }}</small>
         <form method="post" action="{% url 'delete_comment' comment.id %}" onsubmit="return confirm('确定删除这条评论吗？');">
-            {% csrf_token %}
             <button type="submit">删除</button>
         </form>
     </p>
@@ -28,7 +27,6 @@
 {% endfor %}
 
 <form method="post" action="{% url 'add_comment' song.id %}">
-    {% csrf_token %}
     <label>评论：
         <textarea name="content" id="comment-input" required oninput="countChars()"></textarea>
     </label>
