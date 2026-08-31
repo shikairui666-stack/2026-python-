@@ -28,7 +28,7 @@ def safe_filename(name):
 
 def clean_lrc(raw):
     raw=re.sub(r'\[.*?\]', '',raw) #正则去掉歌词里带的[]时间部分，不采用贪婪策略，保证全部过滤掉
-    lines=[line.strip() for line in raw.splitlines() if line.strip()] #过滤空行，保持美观
+    lines=[line.strip() for line in raw.splitlines() if line.strip()] #过滤空行，保持美观，去掉前后空格
     return "\n".join(lines)
 
 def get_lyrics(song_id):
@@ -94,6 +94,45 @@ def get_artist_songs(artist_id,limit=25):
     except Exception as e:
         print(f"[歌曲列表] artist_id={artist_id} 获取失败: {e}")
         return []#防止崩溃
+#歌曲信息部分：通过抓取歌曲详情页HTML解析歌曲名/歌手/专辑/封面(主要数据获取方式)
+def get_song_info_html(song_id):
+    url="https://music.163.com/song?id="+str(song_id)
+    try:
+        r=requests.get(url,headers=headers,timeout=15)
+        r.raise_for_status()
+        html=r.text
+        name=""
+        artist_name=""
+        album=""
+        cover=""
+        t=re.search(r'<title>(.*?)</title>',html)
+        #"晴天（Sunny Day） - 周杰伦 - 单曲 - 网易云音乐"
+        if t:
+            parts=t.group(1).split(" - ")
+            if len(parts)>=2:
+                name=parts[0].strip()
+                artist_name=parts[1].strip()
+        #封面(og:image的content属性顺序可能不同,两种都试)
+        og=re.search(r'property="og:image"[^>]*content="([^"]+)"',html) or re.search(r'content="([^"]+)"[^>]*property="og:image"',html)
+        if og:
+            cover=og.group(1)
+        #专辑(收录于《xxx》专辑中)
+        d=re.search(r'name="description" content="([^"]+)"',html)
+        if d:
+            m=re.search(r'收录于《(.*?)》',d.group(1))
+            if m:
+                album=m.group(1)
+        return {
+            "id":song_id,
+            "name":name,
+            "artist_name":artist_name,
+            "album":album,
+            "cover":cover,
+            "url":"https://music.163.com/#/song?id="+str(song_id)
+        }
+    except Exception as e:
+        print(f"[网页] id={song_id} 解析失败: {e}")
+        return None
 #图片下载和存储
 def download_image(img_url,save_path):
     if not img_url or not isinstance(img_url,str):
@@ -213,6 +252,18 @@ singer_ids=[
     126339,
     37351063
 ]
+test_singer_ids=[
+    6452,#周杰伦
+    3684,#林俊杰
+    2116,#陈奕迅
+    6460,#张学友
+    5781,#薛之谦
+    29051613,#郑润泽
+    5538,#汪苏泷
+    31376161,#颜人中
+    12631485,#h3r3
+    4292,#李荣浩
+    ]
 total_songs=[]
 json_save_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","songs_full_data.json")
 def save_data():
@@ -223,7 +274,7 @@ def save_data():
     except Exception as e:
         print(f"保存但是失败: {e}")
 
-for singer_id in singer_ids:
+for singer_id in test_singer_ids:
     singer=get_artist_info(singer_id)
     if singer==None:
         continue
@@ -231,9 +282,16 @@ for singer_id in singer_ids:
         touxiang_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","singer_head",str(singer_id)+".jpg")
         download_image(singer["picurl"], touxiang_path)
         singer["local_avatar"]=touxiang_path
-        gequ_list=get_artist_songs(singer_id,limit=25)
+        gequ_list=get_artist_songs(singer_id,limit=25)#歌手歌曲列表不能用html，网易云前端js渲染
         for gequ in gequ_list:
-            lrc=get_lyrics(gequ["id"])
+            info=get_song_info_html(gequ["id"])  #HTML抓取为主，只有歌曲详情可以用html
+            if info:
+                #网页缺失时回退API
+                gequ["name"]=info["name"] or gequ.get("name","")
+                gequ["artist_name"]=info["artist_name"] or gequ.get("artist_name","")
+                gequ["album"]=info["album"] or gequ.get("album","")
+                gequ["cover"]=info["cover"] or gequ.get("cover","")
+            lrc=get_lyrics(gequ["id"])  #歌词为API爬取，同理
             gequ["lyric"]=lrc
             lrc_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","lyrics",str(gequ["id"])+"_"+safe_filename(gequ["name"])+".txt")
             with open(lrc_path,"w",encoding="utf-8") as f:
