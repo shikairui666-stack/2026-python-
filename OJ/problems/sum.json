@@ -1,0 +1,29 @@
+{
+  "id": "sum",
+  "title": "A+B",
+  "description": "add",
+  "input_description": "two ints",
+  "output_description": "sum",
+  "samples": [
+    {
+      "input": "1 2",
+      "output": "3"
+    }
+  ],
+  "constraints": "n/a",
+  "testcases": [
+    {
+      "input": "1 2",
+      "output": "3"
+    },
+    {
+      "input": "10 20",
+      "output": "30"
+    }
+  ],
+  "hint": "",
+  "source": "",
+  "tags": [],
+  "author": "",
+  "difficulty": ""
+}

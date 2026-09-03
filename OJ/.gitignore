@@ -1,0 +1,13 @@
+# 评测临时工作目录
+workspace/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 虚拟环境
+.venv/
+
+# 运行日志
+server.log
+*.log

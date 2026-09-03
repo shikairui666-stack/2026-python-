@@ -1,0 +1,44 @@
+{
+  "1": {
+    "user_id": "1",
+    "username": "admin",
+    "password": "e8d6c0deef08903e8eee088ef9514bcdde0766d9487b3b92a2e8e5b8438d3da0",
+    "role": "admin",
+    "join_time": "2026-09-02",
+    "submit_count": 0,
+    "resolve_count": 0,
+    "resolved": []
+  },
+  "2": {
+    "user_id": "2",
+    "username": "alice",
+    "password": "13dc8554575637802eec3c0117f41591a990e1a2d37160018c48c9125063838a",
+    "role": "banned",
+    "join_time": "2026-09-02",
+    "submit_count": 0,
+    "resolve_count": 0,
+    "resolved": []
+  },
+  "3": {
+    "user_id": "3",
+    "username": "bob",
+    "password": "a90ab625ca1eb67a91f78f88846c4acf00a03c76e1f6da72ca88d979b72b807d",
+    "role": "admin",
+    "join_time": "2026-09-02",
+    "submit_count": 0,
+    "resolve_count": 0,
+    "resolved": []
+  },
+  "4": {
+    "user_id": "4",
+    "username": "carol",
+    "password": "6802771c9da76466c118c7eb126c42d620123b80b9ecabcf1b92273ba36f5021",
+    "role": "user",
+    "join_time": "2026-09-02",
+    "submit_count": 2,
+    "resolve_count": 1,
+    "resolved": [
+      "sum"
+    ]
+  }
+}
