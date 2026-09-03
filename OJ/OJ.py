@@ -9,6 +9,7 @@ Online Judge 系统 —— Step 1：题目管理 + Step 2：题目评测 + Step 
 """
 
 import asyncio
+import bcrypt
 import collections
 import datetime
 import hashlib
@@ -277,7 +278,20 @@ _sessions: dict[str, str] = {}  # session_id -> user_id
 
 
 def _hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+    """使用 bcrypt 加密密码（带随机盐）。bcrypt 只取前 72 字节，超出部分截断。"""
+    data = password.encode("utf-8")[:72]
+    return bcrypt.hashpw(data, bcrypt.gensalt()).decode("utf-8")
+
+
+def _verify_password(password: str, stored_hash: str) -> bool:
+    """校验密码。兼容旧版无盐 SHA-256 数据，命中后调用方负责升级为 bcrypt。"""
+    if stored_hash.startswith("$2"):
+        try:
+            return bcrypt.checkpw(password.encode("utf-8")[:72], stored_hash.encode("utf-8"))
+        except ValueError:
+            return False
+    # 旧数据：无盐 SHA-256（hexdigest）
+    return stored_hash == hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
 def _next_user_id() -> str:
@@ -660,8 +674,12 @@ async def login(payload: dict = Body(...)):
         return fail(400, "password 必填")
     for u in _users.values():
         if u.get("username") == username:
-            if u.get("password") != _hash_password(password):
+            if not _verify_password(password, u.get("password", "")):
                 return fail(401, "用户名或密码错误")
+            # 旧版无盐 SHA-256 数据命中后透明升级为 bcrypt
+            if not u.get("password", "").startswith("$2"):
+                u["password"] = _hash_password(password)
+                _save_users()
             if u.get("role") == "banned":
                 return fail(403, "用户被禁用")
             token = secrets.token_hex(16)
