@@ -46,7 +46,6 @@ def get_lyrics(song_id):
         print(f"[歌词] id={song_id} 获取失败: {e}")
         return "歌词获取失败"
 
-    
 #歌手部分，获取名字，简介，图片，url
 def get_artist_info(artist_id): #这里同理
     url="https://music.163.com/api/v1/artist/"+str(artist_id)

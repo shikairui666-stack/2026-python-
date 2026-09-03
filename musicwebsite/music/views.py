@@ -10,9 +10,13 @@ def song_list(request):
     """主页"""
     songs=Song.objects.select_related('artist').order_by('id')
     paginator=Paginator(songs,10)#查歌曲
-    page_number=request.GET.get('page',1)
-    page_obj=paginator.get_page(page_number)
-    return render(request,'music/song_list.html',{'page_obj':page_obj})
+    page_obj=paginator.get_page(request.GET.get('page',1))
+    current=page_obj.number
+    total=paginator.num_pages
+    start=max(current-2,1)
+    end=min(current+2,total)
+    pagenum=range(start,end+1)
+    return render(request,'music/song_list.html',{'page_obj':page_obj,'pagenum':pagenum})
 
 def song_detail(request,song_id):
     """歌曲页"""
@@ -25,9 +29,13 @@ def artist_list(request):
     """歌手页"""
     artists=Artist.objects.order_by('id')
     paginator=Paginator(artists,10)#同理
-    page_number=request.GET.get('page',1)
-    page_obj=paginator.get_page(page_number)
-    return render(request,'music/artist_list.html',{'page_obj':page_obj})
+    page_obj=paginator.get_page(request.GET.get('page',1))
+    current=page_obj.number
+    total=paginator.num_pages
+    start=max(current-2,1)
+    end=min(current+2,total)
+    pagenum=range(start,end+1)
+    return render(request,'music/artist_list.html',{'page_obj':page_obj,'pagenum':pagenum})
 
 
 def artist_detail(request,artist_id):
@@ -63,7 +71,7 @@ def search(request):
         if category == 'artist':
             results=list(Artist.objects.filter(Q(name__icontains=keyword) | Q(brief__icontains=keyword)).order_by('id'))
         else:
-            results=list(Song.objects.filter(Q(name__icontains=keyword) | Q(artist__name__icontains=keyword) | Q(lyric__icontains=keyword)).select_related('artist').order_by('id'))
+            results=list(Song.objects.filter(Q(name__icontains=keyword) | Q(artist__name__icontains=keyword) | Q(lyric__icontains=keyword) | Q(comments__content__icontains=keyword)).select_related('artist').distinct().order_by('id'))
     else:
         results=[]
     cost=time.time() - start
