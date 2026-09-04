@@ -1,10 +1,12 @@
 """
-Online Judge 系统 —— Step 1：题目管理 + Step 2：题目评测 + Step 3：评测列表/重测 + Step 4：用户管理
+Online Judge 系统 —— Step 1-6 基础模块（题目/评测/用户/日志/前端）+ Advance AI 智能命题
 
 - 使用 FastAPI 的异步接口（async def）实现，评测通过 asyncio.create_task 异步执行
 - 题目配置以 JSON 文件形式存入本地 problems/ 目录，每题一个文件
 - 语言配置默认内置 python / cpp，支持动态注册，持久化到 languages.json
 - 用户持久化到 users.json，会话基于 Cookie Session（session id 存内存）；启动自动创建管理员 admin / admintestpassword
+- 评测日志按 submission_id 记录（内存），支持按提交查询；日志可见性受角色 + 题目公开开关控制
+- 日志访问操作写入审计记录，管理员可查询审计日志
 - 所有响应统一为 {code, msg, data} 结构，HTTP 状态码与 code 一致
 """
 
@@ -13,6 +15,7 @@ import bcrypt
 import collections
 import datetime
 import hashlib
+import httpx
 import itertools
 import json
 import os
@@ -37,8 +40,10 @@ PROBLEMS_DIR = BASE_DIR / "problems"
 WORKSPACE_DIR = BASE_DIR / "workspace"
 LANGUAGES_FILE = BASE_DIR / "languages.json"
 USERS_FILE = BASE_DIR / "users.json"
+VISIBILITY_FILE = BASE_DIR / "visibility.json"
+MODEL_CONFIG_FILE = BASE_DIR / "model_config.json"
 
-app = FastAPI(title="Online Judge", version="0.3.0")
+app = FastAPI(title="Online Judge", version="0.5.0")
 
 
 # --------------------------------------------------------------------------- #
@@ -402,6 +407,56 @@ def _new_submission_id() -> str:
     return str(next(_submission_counter))
 
 
+# --------------------------------------------------------------------------- #
+# 评测日志与审计（Step 5）
+# --------------------------------------------------------------------------- #
+LOGS: dict[str, list[dict]] = {}   # submission_id -> [日志条目]
+AUDIT_LOGS: list[dict] = []        # 日志访问审计记录：{user_id, problem_id, action, time, status}
+_LOG_MAX_MSG_LEN = 2000            # 内部日志内容裁剪上限
+_visibility: dict[str, bool] = {}  # problem_id -> 日志是否公开（public_cases）
+
+
+def _append_log(submission_id: str, level: str, stage: str, message: str) -> None:
+    """追加一条内部评测日志（消息超长时裁剪，避免日志无限膨胀）"""
+    LOGS.setdefault(submission_id, []).append({
+        "time": datetime.datetime.now().isoformat(timespec="seconds"),
+        "level": level,
+        "stage": stage,
+        "message": message[:_LOG_MAX_MSG_LEN],
+    })
+
+
+def _load_visibility() -> None:
+    global _visibility
+    _visibility = {}
+    if VISIBILITY_FILE.exists():
+        try:
+            _visibility = json.loads(VISIBILITY_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            _visibility = {}
+
+
+def _save_visibility() -> None:
+    with open(VISIBILITY_FILE, "w", encoding="utf-8") as f:
+        json.dump(_visibility, f, ensure_ascii=False, indent=2)
+
+
+def is_log_public(problem_id: str) -> bool:
+    """题目是否开启日志公开（public_cases）"""
+    return bool(_visibility.get(problem_id, False))
+
+
+def _append_access_audit(user_id: str, problem_id: str, status: str) -> None:
+    """记录一次日志访问，供管理员审计（action 仅 view_logs）"""
+    AUDIT_LOGS.append({
+        "user_id": user_id,
+        "problem_id": problem_id,
+        "action": "view_logs",
+        "time": datetime.datetime.now().isoformat(timespec="seconds"),
+        "status": status,
+    })
+
+
 def _build_command(template: str, src: Path, exe: Path) -> list[str]:
     """将命令模板中的 {src}/{exe} 替换为实际路径并拆分。统一用正斜杠避免 Windows 转义问题。"""
     def _p(p: Path) -> str:
@@ -470,13 +525,16 @@ async def _run_process(cmd: list[str], cwd: Path, stdin_data: str,
 
 
 async def _judge_submission(submission_id: str) -> None:
-    """后台评测任务：编译（如需）→ 逐个测试点运行比对 → 更新结果。"""
+    """后台评测任务：编译（如需）→ 逐个测试点运行比对 → 更新结果，并记录评测日志。"""
     sub = SUBMISSIONS[submission_id]
+    LOGS[submission_id] = []  # 每次评测（含重测）从空日志开始
+    _append_log(submission_id, "info", "start", f"评测开始: problem={sub['problem_id']} language={sub['language']}")
     workdir = Path(tempfile.mkdtemp(prefix="oj_", dir=str(WORKSPACE_DIR)))
     try:
         problem = load_problem(sub["problem_id"])
         lang = _languages.get(sub["language"])
         if problem is None or lang is None:
+            _append_log(submission_id, "error", "load", "题目或语言不存在")
             sub.update(status="error", error_info="problem or language not found",
                        score=0, counts=0, compile_info=None, run_info=None, details=[])
             return
@@ -494,15 +552,19 @@ async def _judge_submission(submission_id: str) -> None:
         # 编译阶段
         compile_info = None
         if lang.get("compile_cmd"):
+            _append_log(submission_id, "info", "compile", "开始编译")
             cmd = _build_command(lang["compile_cmd"], src, exe)
             rc, out, err, timed = await _run_process(cmd, workdir, "", timeout=30, memory_mb=512)
             if timed or rc != 0:
-                compile_info = {"result": "error", "message": _sanitize((err or out), workdir)}
+                msg = _sanitize((err or out), workdir)
+                compile_info = {"result": "error", "message": msg}
+                _append_log(submission_id, "error", "compile", f"编译失败: {msg}")
                 sub.update(status="success", score=0, counts=counts, compile_info=compile_info,
                            run_info={"result": "finished", "message": "0 test cases finished"},
                            error_info="", details=[])
                 return
             compile_info = {"result": "success", "message": ""}
+            _append_log(submission_id, "info", "compile", "编译成功")
 
         # 运行阶段
         run_cmd = _build_command(lang["run_cmd"], src, exe)
@@ -525,15 +587,20 @@ async def _judge_submission(submission_id: str) -> None:
                             "time": round(elapsed, 3), "memory": 0})
             if result == "AC":
                 score += 10
+            _append_log(submission_id, "info", f"testcase_{idx}",
+                        f"测试点 {idx}: {result} (time={round(elapsed, 3)}s)")
 
         sub.update(status="success", score=score, counts=counts, compile_info=compile_info,
                    run_info={"result": "finished", "message": f"{len(testcases)} test cases finished"},
                    error_info="", details=details)
+        _append_log(submission_id, "info", "finish", f"评测完成: score={score}/{counts}")
         # 满分通过 → 通过数 +1（按题目去重）
         if counts > 0 and score == counts:
             _mark_resolved(sub["user_id"], sub["problem_id"])
     except Exception as e:  # 评测过程出现未预期错误
-        sub.update(status="error", error_info=_sanitize(str(e), workdir), score=0, counts=0,
+        msg = _sanitize(str(e), workdir)
+        _append_log(submission_id, "error", "exception", f"评测异常: {msg}")
+        sub.update(status="error", error_info=msg, score=0, counts=0,
                    compile_info=None, run_info=None, details=[])
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
@@ -998,11 +1065,525 @@ async def rejudge(submission_id: str, request: Request = None):
 
 
 # --------------------------------------------------------------------------- #
+# 接口：评测日志与权限（Step 5）
+# --------------------------------------------------------------------------- #
+@app.get("/api/submissions/{submission_id}/log")
+async def get_submission_log(submission_id: str, request: Request = None):
+    """查询评测日志（测例明细 + 得分）：管理员/本人可见；题目开启 public_cases 后所有登录用户可见。"""
+    user, err = _require_user(request)
+    if err is not None:
+        return err
+    sub = SUBMISSIONS.get(submission_id)
+    if sub is None:
+        return fail(404, "submission not found")
+
+    problem_id = sub.get("problem_id", "")
+    allowed = (user.get("role") == "admin"
+               or sub.get("user_id") == user.get("user_id")
+               or is_log_public(problem_id))
+    # 审计：记录本次访问及其状态（未登录 / 提交不存在时已提前返回，不记录）
+    _append_access_audit(user["user_id"], problem_id, "200" if allowed else "403")
+    if not allowed:
+        return fail(403, "权限不足")
+    return ok({
+        "details": sub.get("details", []),
+        "score": sub.get("score"),
+        "counts": sub.get("counts"),
+    })
+
+
+@app.put("/api/problems/{problem_id}/log_visibility")
+async def set_log_visibility(problem_id: str, payload: dict = Body(...), request: Request = None):
+    """配置日志可见性（仅管理员）：public_cases 决定日志是否向所有用户公开。"""
+    _, err = _require_admin(request)
+    if err is not None:
+        return err
+    if load_problem(problem_id) is None:
+        return fail(404, "problem not found")
+    public = payload.get("public_cases", False)
+    if not isinstance(public, bool):
+        return fail(400, "public_cases 必须是布尔值")
+    _visibility[problem_id] = public
+    _save_visibility()
+    return ok({"problem_id": problem_id, "public_cases": public}, "log visibility updated")
+
+
+@app.get("/api/logs/access/")
+async def list_log_access(user_id: str | None = None, problem_id: str | None = None,
+                          page: str | None = None, page_size: str | None = None,
+                          request: Request = None):
+    """查询日志访问审计记录（仅管理员），支持按用户/题目筛选与分页。"""
+    _, err = _require_admin(request)
+    if err is not None:
+        return err
+
+    # 分页参数校验（语义与 GET /api/submissions/ 一致）
+    page_i: int | None = None
+    size_i: int | None = None
+    if page is not None and page_size is None:
+        return fail(400, "page 非空但 page_size 为空")
+    if page is None and page_size is not None:
+        try:
+            size_i = int(page_size)
+        except ValueError:
+            return fail(400, "page_size 必须是整数")
+        page_i = 1
+    elif page is not None and page_size is not None:
+        try:
+            page_i, size_i = int(page), int(page_size)
+        except ValueError:
+            return fail(400, "page/page_size 必须是整数")
+    if size_i is not None and size_i < 1:
+        return fail(400, "page_size 必须 >= 1")
+    if page_i is not None and page_i < 1:
+        return fail(400, "page 必须 >= 1")
+
+    items = list(AUDIT_LOGS)
+    if user_id:
+        items = [a for a in items if a.get("user_id") == user_id]
+    if problem_id:
+        items = [a for a in items if a.get("problem_id") == problem_id]
+    if page_i is not None and size_i is not None:
+        start = (page_i - 1) * size_i
+        items = items[start:start + size_i]
+    return ok(items)
+
+
+@app.post("/api/reset/")
+async def reset_system(request: Request = None):
+    """系统重置：清空用户/题目/提交/日志/审计/可见性，退出登录，重建初始管理员（仅管理员）。"""
+    _, err = _require_admin(request)
+    if err is not None:
+        return err
+
+    global _users, _languages, _submission_counter, _ai_task_counter
+    if PROBLEMS_DIR.exists():
+        for p in PROBLEMS_DIR.glob("*.json"):
+            p.unlink()
+    _visibility.clear()
+    _save_visibility()
+    SUBMISSIONS.clear()
+    LOGS.clear()
+    AUDIT_LOGS.clear()
+    AI_TASKS.clear()
+    _sessions.clear()
+    _submit_times.clear()
+    _submission_counter = itertools.count(1)
+    _ai_task_counter = itertools.count(1)
+    _users = {}
+    _save_users()
+    _load_users()
+    _languages = {k: dict(v) for k, v in DEFAULT_LANGUAGES.items()}
+    _save_languages()
+    return ok(None, "system reset successfully")
+
+
+# --------------------------------------------------------------------------- #
+# AI 智能命题（Advance）
+# --------------------------------------------------------------------------- #
+# 模型配置：provider_url / model / api_key / 单价 / 计价单位。api_key 属于敏感信息，
+# 只保存在本地 model_config.json，任何查询响应 / 日志 / 错误信息中都不返回明文。
+_model_config: dict[str, Any] = {}
+AI_TASKS: dict[str, dict] = {}
+_ai_task_counter = itertools.count(1)
+
+
+def _load_model_config() -> None:
+    global _model_config
+    _model_config = {}
+    if MODEL_CONFIG_FILE.exists():
+        try:
+            _model_config = json.loads(MODEL_CONFIG_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            _model_config = {}
+
+
+def _save_model_config() -> None:
+    with open(MODEL_CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(_model_config, f, ensure_ascii=False, indent=2)
+
+
+def _safe_model_config() -> dict:
+    """对外返回的模型配置：api_key 用布尔标记代替，绝不返回明文。"""
+    return {
+        "provider_url": _model_config.get("provider_url", ""),
+        "model": _model_config.get("model", ""),
+        "api_key_configured": bool(_model_config.get("api_key")),
+        "input_price": _model_config.get("input_price", 0.0),
+        "output_price": _model_config.get("output_price", 0.0),
+        "price_unit": _model_config.get("price_unit", 1000000),
+    }
+
+
+def _new_ai_task_id() -> str:
+    return f"ai-task-{next(_ai_task_counter)}"
+
+
+def _is_cancelled(task: dict) -> bool:
+    """任务是否已被请求中断；是则落盘 cancelled 状态并返回 True。"""
+    if task.get("cancel_requested"):
+        task["status"] = "cancelled"
+        task["progress"] = "任务已取消"
+        return True
+    return False
+
+
+def _accumulate_usage(total: dict, usage: dict) -> None:
+    for k in ("input_tokens", "output_tokens", "total_tokens"):
+        total[k] = int(total.get(k, 0)) + int(usage.get(k, 0) or 0)
+    if usage.get("estimated"):
+        total["estimated"] = True
+
+
+def _build_usage(total: dict) -> dict:
+    """按配置的单价与计价单位统计费用。模型未返回 usage 时标记 estimated。"""
+    inp = int(total.get("input_tokens", 0))
+    out = int(total.get("output_tokens", 0))
+    unit = int(_model_config.get("price_unit", 1000000) or 1000000)
+    iprice = float(_model_config.get("input_price", 0.0) or 0.0)
+    oprice = float(_model_config.get("output_price", 0.0) or 0.0)
+    cost = inp / unit * iprice + out / unit * oprice
+    result = {
+        "input_tokens": inp,
+        "output_tokens": out,
+        "total_tokens": inp + out,
+        "cost": round(cost, 6),
+        "currency": "USD",
+    }
+    if total.get("estimated"):
+        result["estimated"] = True
+    return result
+
+
+def _extract_json(text: str) -> dict:
+    """从模型输出中提取首个完整 JSON 对象（容忍 ```json``` 代码块包裹与前后废话）。"""
+    text = (text or "").strip()
+    fence = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
+    if fence:
+        text = fence.group(1).strip()
+    start = text.find("{")
+    if start == -1:
+        raise ValueError("模型输出中未找到 JSON 对象")
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return json.loads(text[start:i + 1])
+    raise ValueError("模型输出的 JSON 对象未闭合")
+
+
+def _build_system_prompt() -> str:
+    return (
+        "你是一名资深 OJ 命题专家。请根据用户提出的命题需求，设计一道完整、可直接用于在线评测系统的编程题。\n"
+        "你必须只输出一个 JSON 对象，不要输出任何解释文字或 markdown 代码块。\n"
+        "JSON 字段要求：\n"
+        "- 必填字段：id（字符串，仅字母/数字/下划线/连字符）、title、description、input_description、"
+        "output_description、samples（数组，元素为 {\"input\", \"output\"}，至少 1 个）、"
+        "constraints（数据范围与限制）、testcases（数组，元素为 {\"input\", \"output\"}，至少 3 个，需覆盖边界与不同规模）。\n"
+        "- 可选字段：hint、source、tags（字符串数组）、time_limit（浮点，秒）、memory_limit（整数，MB）、author、difficulty。\n"
+        "要求：测试点必须包含边界情况（最小值、最大值、空输入、大规模输入）与一般情况；"
+        "题面与输入输出格式清晰自洽；难度与考察知识点符合需求。"
+    )
+
+
+def _build_user_prompt(requirement: str, problem_id: str | None) -> str:
+    if problem_id:
+        existing = load_problem(problem_id)
+        if existing:
+            return (
+                f"命题需求：{requirement}\n\n"
+                f"请参考/改编下面这道已有题目（id={problem_id}）的配置，可以修改背景、考察内容或加强测试用例，"
+                f"但保留需求中要求的考查目标：\n"
+                f"{json.dumps(existing, ensure_ascii=False, indent=2)}"
+            )
+    return f"命题需求：{requirement}"
+
+
+async def _call_llm(messages: list[dict], task: dict) -> tuple[str, dict]:
+    """调用 OpenAI 兼容 /chat/completions（流式优先，失败回退非流式）。
+
+    返回 (完整文本, usage)。provider 未返回 usage 时按「字符数/4」估算 Token 并标记 estimated。
+    流式期间每收到一定量内容即更新 task["progress"]，实现实时进度；检测到中断请求则立即终止请求。
+    """
+    provider_url = (_model_config.get("provider_url") or "").rstrip("/")
+    model = _model_config.get("model") or ""
+    api_key = _model_config.get("api_key") or ""
+    if not provider_url or not model:
+        raise RuntimeError("模型未配置或配置不完整")
+
+    url = provider_url if provider_url.endswith("/chat/completions") else provider_url + "/chat/completions"
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    prompt_text = "\n".join(m.get("content", "") for m in messages)
+    payload = {"model": model, "messages": messages, "temperature": 0.7, "stream": True}
+
+    content_parts: list[str] = []
+    usage: dict = {}
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
+            async with client.stream("POST", url, json=payload, headers=headers) as resp:
+                if resp.status_code >= 400:
+                    body = (await resp.aread()).decode("utf-8", "replace")
+                    raise RuntimeError(f"模型服务返回 {resp.status_code}: {body[:500]}")
+                ctype = resp.headers.get("content-type", "") or ""
+                if "text/event-stream" in ctype:
+                    async for line in resp.aiter_lines():
+                        if task.get("cancel_requested"):
+                            break
+                        if not line.startswith("data:"):
+                            continue
+                        data = line[5:].strip()
+                        if data == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(data)
+                        except json.JSONDecodeError:
+                            continue
+                        if isinstance(chunk.get("usage"), dict):
+                            usage = chunk["usage"]
+                        choices = chunk.get("choices") or []
+                        if choices and (choices[0].get("delta") or {}).get("content"):
+                            content_parts.append(choices[0]["delta"]["content"])
+                            if len(content_parts) % 8 == 0:
+                                task["progress"] = f"正在生成题目… 已生成 {sum(len(c) for c in content_parts)} 字符"
+                else:
+                    body = (await resp.aread()).decode("utf-8", "replace")
+                    data = json.loads(body)
+                    usage = data.get("usage") or {}
+                    content = ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+                    content_parts.append(content)
+    except httpx.HTTPError as e:
+        raise RuntimeError(f"模型请求失败：{e}") from e
+
+    text = "".join(content_parts)
+    # OpenAI 兼容接口返回 prompt_tokens/completion_tokens，统一映射到 input/output
+    if usage:
+        if "input_tokens" not in usage and usage.get("prompt_tokens") is not None:
+            usage["input_tokens"] = usage["prompt_tokens"]
+        if "output_tokens" not in usage and usage.get("completion_tokens") is not None:
+            usage["output_tokens"] = usage["completion_tokens"]
+    if not usage or not usage.get("total_tokens"):
+        usage = {
+            "input_tokens": max(1, len(prompt_text) // 4),
+            "output_tokens": max(1, len(text) // 4),
+            "total_tokens": max(1, (len(prompt_text) + len(text)) // 4),
+            "estimated": True,
+        }
+    usage.setdefault("input_tokens", 0)
+    usage.setdefault("output_tokens", 0)
+    usage.setdefault("total_tokens", int(usage.get("input_tokens", 0)) + int(usage.get("output_tokens", 0)))
+    return text, usage
+
+
+async def _run_ai_task(task_id: str) -> None:
+    """后台执行命题任务：解析需求 -> 流式生成 -> 校验整理（失败自动修正一次）。"""
+    task = AI_TASKS[task_id]
+    if task.get("cancel_requested"):
+        task["status"] = "cancelled"
+        task["progress"] = "任务已取消"
+        return
+    task["status"] = "running"
+
+    usage_total: dict = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    try:
+        task["progress"] = "解析命题需求…"
+        await asyncio.sleep(0.3)
+        if _is_cancelled(task):
+            return
+
+        messages = [
+            {"role": "system", "content": _build_system_prompt()},
+            {"role": "user", "content": _build_user_prompt(task["requirement"], task.get("problem_id"))},
+        ]
+
+        task["progress"] = "正在生成题目…"
+        text, usage = await _call_llm(messages, task)
+        _accumulate_usage(usage_total, usage)
+        if _is_cancelled(task):
+            return
+        if not text.strip():
+            raise RuntimeError("模型返回了空内容")
+
+        task["progress"] = "校验并整理题目配置…"
+        await asyncio.sleep(0.2)
+        try:
+            problem = normalize_problem(_extract_json(text))
+        except (ValueError, json.JSONDecodeError) as e:
+            task["progress"] = "格式校验未通过，正在修正…"
+            fix_messages = messages + [
+                {"role": "assistant", "content": text},
+                {"role": "user", "content": f"你上一轮的输出无法解析为合法题目 JSON，错误信息：{e}。请只输出修正后的完整 JSON 对象。"},
+            ]
+            text2, usage2 = await _call_llm(fix_messages, task)
+            _accumulate_usage(usage_total, usage2)
+            if _is_cancelled(task):
+                return
+            try:
+                problem = normalize_problem(_extract_json(text2))
+            except Exception as e2:
+                raise RuntimeError(f"题目配置校验失败：{e2}") from e2
+
+        if _is_cancelled(task):
+            return
+        task["result"] = problem
+        task["status"] = "success"
+        task["progress"] = "生成完成"
+        task["usage"] = _build_usage(usage_total)
+    except asyncio.CancelledError:
+        task["status"] = "cancelled"
+        task["progress"] = "任务已取消"
+    except Exception as e:
+        task["status"] = "failed"
+        task["progress"] = "生成失败"
+        task["error"] = str(e)
+
+
+def _public_ai_task(task: dict) -> dict:
+    """对外返回的任务信息（不含任何敏感字段）。"""
+    return {
+        "task_id": task["task_id"],
+        "status": task["status"],
+        "progress": task.get("progress"),
+        "result": task.get("result"),
+        "usage": task.get("usage"),
+        "error": task.get("error"),
+        "problem_id": task.get("problem_id"),
+        "requirement": task.get("requirement"),
+    }
+
+
+@app.put("/api/ai/model-config")
+async def set_model_config(payload: dict = Body(...), request: Request = None):
+    """配置模型（已登录）。api_key 仅保存，不通过任何响应返回。更新时可省略 api_key 以沿用旧密钥。"""
+    user, err = _require_user(request)
+    if err is not None:
+        return err
+
+    provider_url = payload.get("provider_url")
+    model = payload.get("model")
+    api_key = payload.get("api_key")
+    if not isinstance(provider_url, str) or not provider_url.strip():
+        return fail(400, "provider_url 必填")
+    if not isinstance(model, str) or not model.strip():
+        return fail(400, "model 必填")
+    if isinstance(api_key, str) and api_key.strip():
+        _model_config["api_key"] = api_key.strip()
+    elif not _model_config.get("api_key"):
+        return fail(400, "api_key 必填")
+
+    input_price = payload.get("input_price", 0.0)
+    output_price = payload.get("output_price", 0.0)
+    price_unit = payload.get("price_unit", 1000000)
+    for name, v in (("input_price", input_price), ("output_price", output_price)):
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            return fail(400, f"{name} 必须是数字")
+    if isinstance(price_unit, bool) or not isinstance(price_unit, int) or price_unit <= 0:
+        return fail(400, "price_unit 必须是正整数")
+
+    _model_config.update({
+        "provider_url": provider_url.strip(),
+        "model": model.strip(),
+        "input_price": float(input_price),
+        "output_price": float(output_price),
+        "price_unit": int(price_unit),
+    })
+    _save_model_config()
+    return ok(_safe_model_config(), "model config updated")
+
+
+@app.get("/api/ai/model-config")
+async def get_model_config(request: Request = None):
+    """查询模型配置（已登录）。api_key 不返回，仅返回是否已配置。"""
+    user, err = _require_user(request)
+    if err is not None:
+        return err
+    return ok(_safe_model_config())
+
+
+@app.post("/api/ai/problem-tasks/")
+async def create_ai_task(payload: dict = Body(...), request: Request = None):
+    """创建智能命题任务（已登录）。requirement 必填，problem_id 可选（参考/改编已有题目）。"""
+    user, err = _require_user(request)
+    if err is not None:
+        return err
+    if not _model_config.get("provider_url") or not _model_config.get("model") or not _model_config.get("api_key"):
+        return fail(400, "请先配置模型")
+
+    requirement = payload.get("requirement")
+    if not isinstance(requirement, str) or not requirement.strip():
+        return fail(400, "requirement 必填")
+    problem_id = payload.get("problem_id")
+    if problem_id is not None:
+        if not isinstance(problem_id, str) or not problem_id:
+            return fail(400, "problem_id 必须是字符串")
+        if load_problem(problem_id) is None:
+            return fail(404, "指定题目不存在")
+
+    task_id = _new_ai_task_id()
+    AI_TASKS[task_id] = {
+        "task_id": task_id,
+        "user_id": user["user_id"],
+        "username": user.get("username"),
+        "requirement": requirement.strip(),
+        "problem_id": problem_id,
+        "status": "pending",
+        "progress": "等待开始",
+        "result": None,
+        "usage": None,
+        "error": None,
+        "cancel_requested": False,
+    }
+    asyncio.create_task(_run_ai_task(task_id))
+    return ok({"task_id": task_id, "status": "pending"}, "task created")
+
+
+@app.get("/api/ai/problem-tasks/{task_id}")
+async def get_ai_task(task_id: str, request: Request = None):
+    """查询任务状态与结果（任务创建者或管理员）。"""
+    user, err = _require_user(request)
+    if err is not None:
+        return err
+    task = AI_TASKS.get(task_id)
+    if task is None:
+        return fail(404, "task not found")
+    if user.get("role") != "admin" and task.get("user_id") != user["user_id"]:
+        return fail(403, "权限不足")
+    return ok(_public_ai_task(task))
+
+
+@app.put("/api/ai/problem-tasks/{task_id}/cancel")
+async def cancel_ai_task(task_id: str, request: Request = None):
+    """中断任务（创建者或管理员）。中断后阻止任务继续执行并落盘 cancelled 状态。"""
+    user, err = _require_user(request)
+    if err is not None:
+        return err
+    task = AI_TASKS.get(task_id)
+    if task is None:
+        return fail(404, "task not found")
+    if user.get("role") != "admin" and task.get("user_id") != user["user_id"]:
+        return fail(403, "权限不足")
+    if task.get("status") in ("success", "failed", "cancelled"):
+        return fail(409, "任务已经结束")
+    task["cancel_requested"] = True
+    task["status"] = "cancelled"
+    task["progress"] = "任务已取消"
+    return ok({"task_id": task_id, "status": "cancelled"}, "task cancelled")
+
+
+# --------------------------------------------------------------------------- #
 # 启动
 # --------------------------------------------------------------------------- #
 WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
 _load_languages()
 _load_users()
+_load_visibility()
+_load_model_config()
 
 if __name__ == "__main__":
     import uvicorn
