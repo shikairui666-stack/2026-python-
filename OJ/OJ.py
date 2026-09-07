@@ -838,6 +838,34 @@ async def change_password(user_id: str, payload: dict = Body(...), request: Requ
     return ok(None, "密码修改成功")
 
 
+@app.put("/api/users/{user_id}/username")
+async def change_username(user_id: str, payload: dict = Body(...), request: Request = None):
+    """修改用户名（本人或管理员）。本人改自己需验证密码；管理员改他人无需密码。"""
+    user, err = _require_user(request)
+    if err is not None:
+        return err
+    target = _users.get(user_id)
+    if target is None:
+        return fail(404, "用户不存在")
+
+    new_username = payload.get("new_username")
+    if not isinstance(new_username, str) or not (3 <= len(new_username) <= 40):
+        return fail(400, "用户名长度需为 3-40 字符")
+    if any(u.get("username") == new_username for u in _users.values() if u is not target):
+        return fail(400, "用户名已存在")
+
+    if user_id == user["user_id"]:
+        password = payload.get("password")
+        if not isinstance(password, str) or not _verify_password(password, target.get("password", "")):
+            return fail(400, "密码错误")
+    elif user.get("role") != "admin":
+        return fail(403, "权限不足")
+
+    target["username"] = new_username
+    _save_users()
+    return ok({"user_id": user_id, "username": new_username}, "用户名修改成功")
+
+
 @app.post("/api/users/admin")
 async def create_admin(payload: dict = Body(...), request: Request = None):
     """创建管理员账户（仅管理员）"""

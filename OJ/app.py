@@ -240,6 +240,27 @@ def _profile() -> None:
     c2.metric("注册时间", d.get("join_time"))
     c3.write(f"用户 ID：{d.get('user_id')}")
 
+    st.subheader("修改用户名")
+    with st.form("change_username"):
+        c1, c2 = st.columns(2)
+        new_name = c1.text_input("新用户名", key="chg_uname")
+        pwd = c2.text_input("密码（验证身份）", type="password", key="chg_upwd")
+        st.caption("用户名 3-40 字符")
+        if st.form_submit_button("修改用户名"):
+            if not new_name or not (3 <= len(new_name) <= 40):
+                st.error("用户名长度需为 3-40 字符")
+            elif not pwd:
+                st.error("请输入密码验证身份")
+            else:
+                _, b = api("PUT", f"/api/users/{uid}/username",
+                           json={"new_username": new_name, "password": pwd})
+                if b.get("code") == 200:
+                    st.session_state["user"]["username"] = new_name
+                    st.success("用户名修改成功")
+                    st.rerun()
+                else:
+                    st.error(_msg(b))
+
     st.subheader("修改密码")
     with st.form("change_pwd"):
         c1, c2, c3 = st.columns(3)
