@@ -24,6 +24,7 @@ import secrets
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -488,10 +489,23 @@ def _is_mle(returncode: int | None, stderr: str) -> bool:
     return returncode == -9  # SIGKILL（Linux OOM 杀手）
 
 
+def _peak_memory_mb() -> float:
+    """读取已回收子进程的峰值内存（RUSAGE_CHILDREN），返回 MB。仅 POSIX 有效，否则 0。"""
+    try:
+        import resource
+        rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+        # Linux 返回 KB，macOS 返回 bytes
+        if sys.platform == "darwin":
+            return round(rss / (1024 * 1024), 1)
+        return round(rss / 1024, 1)
+    except Exception:
+        return 0.0
+
+
 async def _run_process(cmd: list[str], cwd: Path, stdin_data: str,
-                       timeout: float, memory_mb: int) -> tuple[int | None, str, str, bool]:
-    """在子进程中运行命令。返回 (returncode, stdout, stderr, 是否超时)。
-    阻塞调用放到线程池执行，避免卡住事件循环。"""
+                       timeout: float, memory_mb: int) -> tuple[int | None, str, str, bool, float]:
+    """在子进程中运行命令。返回 (returncode, stdout, stderr, 是否超时, 峰值内存 MB)。
+    阻塞调用放到线程池执行，避免卡住事件循环。内存限制通过 RLIMIT_AS 实现，峰值内存用 getrusage 统计。"""
 
     def _preexec() -> None:
         # 仅 POSIX 可用：限制地址空间以实现内存限制
@@ -502,7 +516,7 @@ async def _run_process(cmd: list[str], cwd: Path, stdin_data: str,
         except Exception:
             pass
 
-    def _target() -> tuple[int | None, str, str, bool]:
+    def _target() -> tuple[int | None, str, str, bool, float]:
         kwargs: dict = {
             "cwd": str(cwd),
             "input": stdin_data.encode("utf-8"),
@@ -517,9 +531,10 @@ async def _run_process(cmd: list[str], cwd: Path, stdin_data: str,
             return (proc.returncode,
                     proc.stdout.decode("utf-8", errors="replace"),
                     proc.stderr.decode("utf-8", errors="replace"),
-                    False)
+                    False,
+                    _peak_memory_mb())
         except subprocess.TimeoutExpired:
-            return (None, "", "", True)
+            return (None, "", "", True, _peak_memory_mb())
 
     return await asyncio.to_thread(_target)
 
@@ -554,7 +569,7 @@ async def _judge_submission(submission_id: str) -> None:
         if lang.get("compile_cmd"):
             _append_log(submission_id, "info", "compile", "开始编译")
             cmd = _build_command(lang["compile_cmd"], src, exe)
-            rc, out, err, timed = await _run_process(cmd, workdir, "", timeout=30, memory_mb=512)
+            rc, out, err, timed, _ = await _run_process(cmd, workdir, "", timeout=30, memory_mb=512)
             if timed or rc != 0:
                 msg = _sanitize((err or out), workdir)
                 compile_info = {"result": "error", "message": msg}
@@ -572,7 +587,7 @@ async def _judge_submission(submission_id: str) -> None:
         score = 0
         for idx, tc in enumerate(testcases, start=1):
             start = time.perf_counter()
-            rc, out, err, timed = await _run_process(
+            rc, out, err, timed, mem = await _run_process(
                 run_cmd, workdir, tc.get("input", ""), timeout=time_limit, memory_mb=memory_limit)
             elapsed = time.perf_counter() - start
 
@@ -584,7 +599,7 @@ async def _judge_submission(submission_id: str) -> None:
                 result = "AC" if _normalize_output(out) == _normalize_output(tc.get("output", "")) else "WA"
 
             details.append({"id": idx, "result": result,
-                            "time": round(elapsed, 3), "memory": 0})
+                            "time": round(elapsed, 3), "memory": mem})
             if result == "AC":
                 score += 10
             _append_log(submission_id, "info", f"testcase_{idx}",
@@ -794,6 +809,33 @@ async def register(payload: dict = Body(...)):
     }
     _save_users()
     return ok(_public_user(_users[uid]), "register success")
+
+
+@app.put("/api/users/{user_id}/password")
+async def change_password(user_id: str, payload: dict = Body(...), request: Request = None):
+    """修改密码（本人或管理员）。本人改自己需验证旧密码；管理员改他人无需旧密码。"""
+    user, err = _require_user(request)
+    if err is not None:
+        return err
+    target = _users.get(user_id)
+    if target is None:
+        return fail(404, "用户不存在")
+
+    new_password = payload.get("new_password")
+    if not isinstance(new_password, str) or len(new_password) < 6:
+        return fail(400, "新密码长度至少 6 位")
+
+    if user_id == user["user_id"]:
+        # 本人修改：需验证旧密码
+        old_password = payload.get("old_password")
+        if not isinstance(old_password, str) or not _verify_password(old_password, target.get("password", "")):
+            return fail(400, "旧密码错误")
+    elif user.get("role") != "admin":
+        return fail(403, "权限不足")
+
+    target["password"] = _hash_password(new_password)
+    _save_users()
+    return ok(None, "密码修改成功")
 
 
 @app.post("/api/users/admin")

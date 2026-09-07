@@ -125,6 +125,31 @@ def _clean_cases(rows) -> list[dict]:
     return result
 
 
+def _cases_editor(key_id: str, label: str, cases: list[dict]) -> list[dict]:
+    """多行样例/测试点编辑器：每条 input/output 用 text_area 多行编辑，支持动态增删。"""
+    st.markdown(f"**{label}**")
+    n_key = f"{key_id}_n"
+    if n_key not in st.session_state:
+        st.session_state[n_key] = max(1, len(cases or []))
+    n = int(st.session_state[n_key])
+    result = []
+    for i in range(n):
+        cur = (cases or [])[i] if i < len(cases or []) else {"input": "", "output": ""}
+        st.caption(f"第 {i + 1} 组")
+        c1, c2 = st.columns(2)
+        inp = c1.text_area("输入", value=cur.get("input", ""), height=90, key=f"{key_id}_in_{i}")
+        out = c2.text_area("输出", value=cur.get("output", ""), height=90, key=f"{key_id}_out_{i}")
+        result.append({"input": inp, "output": out})
+    ca, cd = st.columns(2)
+    if ca.button("＋ 添加一组", key=f"{key_id}_add"):
+        st.session_state[n_key] = n + 1
+        st.rerun()
+    if n > 1 and cd.button("－ 删除最后一组", key=f"{key_id}_del"):
+        st.session_state[n_key] = n - 1
+        st.rerun()
+    return result
+
+
 # --------------------------------------------------------------------------- #
 # 任务 1：用户页面组
 # --------------------------------------------------------------------------- #
@@ -169,18 +194,31 @@ def _login_register() -> None:
             username = st.text_input("用户名", key="reg_u")
             password = st.text_input("密码", type="password", key="reg_p")
             confirm = st.text_input("确认密码", type="password", key="reg_c")
+            st.caption("用户名 3-40 字符，密码至少 6 位")
             if st.form_submit_button("注册"):
                 if not username or not password:
                     st.error("用户名和密码不能为空")
+                elif len(username) < 3 or len(username) > 40:
+                    st.error("用户名长度需为 3-40 字符")
+                elif len(password) < 6:
+                    st.error("密码长度至少 6 位")
                 elif password != confirm:
                     st.error("两次输入的密码不一致")
                 else:
                     _, body = api("POST", "/api/users/",
                                   json={"username": username, "password": password})
-                    if body.get("code") == 200:
-                        st.success("注册成功，请登录")
-                    else:
+                    if body.get("code") != 200:
                         st.error(_msg(body))
+                    else:
+                        # 注册成功后自动登录
+                        _, lb = api("POST", "/api/auth/login",
+                                    json={"username": username, "password": password})
+                        if lb.get("code") == 200:
+                            st.session_state["user"] = lb["data"]
+                            st.success(f"注册成功，已自动登录：{username}")
+                            st.rerun()
+                        else:
+                            st.success("注册成功，请手动登录")
 
 
 def _profile() -> None:
@@ -201,6 +239,26 @@ def _profile() -> None:
     c1.metric("提交次数", d.get("submit_count"))
     c2.metric("注册时间", d.get("join_time"))
     c3.write(f"用户 ID：{d.get('user_id')}")
+
+    st.subheader("修改密码")
+    with st.form("change_pwd"):
+        c1, c2, c3 = st.columns(3)
+        old_p = c1.text_input("旧密码", type="password", key="chg_old")
+        new_p = c2.text_input("新密码", type="password", key="chg_new")
+        new_p2 = c3.text_input("确认新密码", type="password", key="chg_new2")
+        st.caption("新密码至少 6 位")
+        if st.form_submit_button("修改密码"):
+            if not new_p or len(new_p) < 6:
+                st.error("新密码长度至少 6 位")
+            elif new_p != new_p2:
+                st.error("两次输入的新密码不一致")
+            else:
+                _, b = api("PUT", f"/api/users/{uid}/password",
+                           json={"old_password": old_p, "new_password": new_p})
+                if b.get("code") == 200:
+                    st.success("密码修改成功")
+                else:
+                    st.error(_msg(b))
 
 
 def _admin_users() -> None:
@@ -306,8 +364,17 @@ def _problem_list() -> None:
         st.markdown("**提示**")
         st.write(p["hint"])
     st.markdown("**样例**")
-    for i, s in enumerate(p["samples"], start=1):
-        st.markdown(f"样例 {i}：输入 `{s['input']}` ｜ 输出 `{s['output']}`")
+    samples = p.get("samples") or []
+    if samples:
+        for i, s in enumerate(samples, 1):
+            st.caption(f"样例 {i}")
+            c_in, c_out = st.columns(2)
+            c_in.markdown("**输入**")
+            c_in.code(s.get("input", ""), language=None)
+            c_out.markdown("**输出**")
+            c_out.code(s.get("output", ""), language=None)
+    else:
+        st.write("无")
 
 
 def render_problem_form(prefix: str, defaults: dict | None = None) -> dict:
@@ -339,12 +406,8 @@ def render_problem_form(prefix: str, defaults: dict | None = None) -> dict:
     memory_limit = c7.number_input("内存限制（MB）", min_value=1, max_value=2048,
                                    value=int(d.get("memory_limit", 128)), key=f"{prefix}_ml")
 
-    st.markdown("**样例（samples）**")
-    samples = st.data_editor(d.get("samples") or [{"input": "", "output": ""}],
-                             num_rows="dynamic", key=f"{prefix}_samples")
-    st.markdown("**测试点（testcases）**")
-    testcases = st.data_editor(d.get("testcases") or [{"input": "", "output": ""}],
-                               num_rows="dynamic", key=f"{prefix}_testcases")
+    samples = _cases_editor(f"{prefix}_samples", "样例（samples）", d.get("samples"))
+    testcases = _cases_editor(f"{prefix}_testcases", "测试点（testcases）", d.get("testcases"))
 
     return {
         "id": pid,
@@ -527,7 +590,7 @@ def _poll_and_show(sid: str, max_seconds: int = 30) -> None:
             time.sleep(1)
         else:
             ph.empty()
-            render_result(sid, d, is_admin)
+            render_result(sid, d, is_admin, key_prefix="poll_")
             return
     ph.warning("评测时间较长，请稍后到“提交详情”页查看结果。")
 
@@ -596,10 +659,10 @@ def _submission_detail() -> None:
     if body.get("code") != 200:
         st.error(_msg(body))
         return
-    render_result(sid, body["data"], is_admin)
+    render_result(sid, body["data"], is_admin, key_prefix="detail_")
 
 
-def render_result(sid: str, d: dict, is_admin: bool) -> None:
+def render_result(sid: str, d: dict, is_admin: bool, key_prefix: str = "") -> None:
     """展示一次评测的结果：状态、得分、编译/运行/错误信息、测例详情与日志"""
     st.markdown(f"**submission_id**：`{sid}` ｜ **状态**：`{d['status']}`")
 
@@ -635,7 +698,7 @@ def render_result(sid: str, d: dict, is_admin: bool) -> None:
         st.caption(f"评测日志不可见：{_msg(lb)}")
 
     if is_admin:
-        if st.button("重新评测（管理员）", key=f"rejudge_{sid}"):
+        if st.button("重新评测（管理员）", key=f"{key_prefix}rejudge_{sid}"):
             _, rb = api("PUT", f"/api/submissions/{sid}/rejudge")
             if rb.get("code") == 200:
                 st.success("已重新评测")
@@ -647,6 +710,62 @@ def render_result(sid: str, d: dict, is_admin: bool) -> None:
 # --------------------------------------------------------------------------- #
 # 入口
 # --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# 语言管理（Step 2 任务 3/4：动态注册新语言 + 查询语言列表）
+# --------------------------------------------------------------------------- #
+def page_languages() -> None:
+    st.header("语言管理")
+    if not is_logged_in():
+        st.warning("请先登录后再管理语言。")
+        return
+
+    _, lb = api("GET", "/api/languages/")
+    if lb.get("code") != 200:
+        st.error(_msg(lb))
+        return
+    names = lb["data"].get("name", [])
+    st.subheader("当前支持的语言")
+    if names:
+        st.write("、".join(names))
+    else:
+        st.write("暂无")
+
+    st.subheader("动态注册新语言")
+    with st.form("register_language"):
+        c1, c2 = st.columns(2)
+        name = c1.text_input("语言名称", key="lang_name", placeholder="如 go / java")
+        file_ext = c2.text_input("文件扩展名", key="lang_ext", placeholder="如 .go / .java")
+        run_cmd = st.text_input("运行命令", key="lang_run",
+                                placeholder="如 python3 {src} 或 {exe}")
+        compile_cmd = st.text_input("编译命令（可选，编译型语言填）", key="lang_compile",
+                                    placeholder="如 g++ {src} -o {exe}")
+        c3, c4 = st.columns(2)
+        time_limit = c3.number_input("时间限制（秒）", min_value=0.1, max_value=60.0,
+                                     value=1.0, key="lang_tl")
+        memory_limit = c4.number_input("内存限制（MB）", min_value=1, max_value=2048,
+                                       value=128, key="lang_ml")
+        st.caption("命令模板占位符：`{src}` 源码路径、`{exe}` 编译产物路径；编译命令留空表示解释型语言。")
+        if st.form_submit_button("注册语言"):
+            if not name.strip() or not file_ext.strip() or not run_cmd.strip():
+                st.error("语言名称、文件扩展名、运行命令不能为空")
+            else:
+                payload = {
+                    "name": name.strip(),
+                    "file_ext": file_ext.strip(),
+                    "run_cmd": run_cmd.strip(),
+                    "time_limit": float(time_limit),
+                    "memory_limit": int(memory_limit),
+                }
+                if compile_cmd.strip():
+                    payload["compile_cmd"] = compile_cmd.strip()
+                _, b = api("POST", "/api/languages/", json=payload)
+                if b.get("code") == 200:
+                    st.success(f"语言 `{payload['name']}` 注册成功")
+                    st.rerun()
+                else:
+                    st.error(_msg(b))
+
+
 # --------------------------------------------------------------------------- #
 # AI 智能命题（Advance）
 # --------------------------------------------------------------------------- #
@@ -819,9 +938,29 @@ def _render_ai_status(task: dict) -> None:
     st.markdown("**约束条件**")
     st.write(result.get("constraints"))
     st.markdown("**样例**")
-    for s in result.get("samples") or []:
-        st.markdown(f"- 输入 `{s.get('input')}` ｜ 输出 `{s.get('output')}`")
-    st.markdown(f"**测试点**：{len(result.get('testcases') or [])} 个")
+    samples = result.get("samples") or []
+    if samples:
+        for i, s in enumerate(samples, 1):
+            st.caption(f"样例 {i}")
+            c_in, c_out = st.columns(2)
+            c_in.markdown("**输入**")
+            c_in.code(s.get("input", ""), language=None)
+            c_out.markdown("**输出**")
+            c_out.code(s.get("output", ""), language=None)
+    else:
+        st.write("无")
+
+    testcases = result.get("testcases") or []
+    st.markdown(f"**测试点**：{len(testcases)} 个")
+    if testcases:
+        with st.expander(f"查看 {len(testcases)} 个测试点"):
+            for i, t in enumerate(testcases, 1):
+                st.caption(f"测试点 {i}")
+                c_in, c_out = st.columns(2)
+                c_in.markdown("**输入**")
+                c_in.code(t.get("input", ""), language=None)
+                c_out.markdown("**输出**")
+                c_out.code(t.get("output", ""), language=None)
     with st.expander("查看完整 JSON"):
         st.json(result)
 
@@ -851,13 +990,15 @@ def main() -> None:
     else:
         st.sidebar.warning("未登录")
 
-    page = st.sidebar.radio("导航", ["用户中心", "题目管理", "评测与提交", "AI 智能命题"], key="nav")
+    page = st.sidebar.radio("导航", ["用户中心", "题目管理", "评测与提交", "语言管理", "AI 智能命题"], key="nav")
     if page == "用户中心":
         page_user()
     elif page == "题目管理":
         page_problems()
     elif page == "评测与提交":
         page_submissions()
+    elif page == "语言管理":
+        page_languages()
     else:
         page_ai()
 
