@@ -1,0 +1,47 @@
+{
+  "id": "fibonacci",
+  "title": "斐波那契数列",
+  "description": "斐波那契数列定义为：F(0) = 0，F(1) = 1，F(n) = F(n-1) + F(n-2)（n ≥ 2）。\n\n给定 n，求 F(n) 对 1000000007 取模后的结果。\n\n时间限制：1 秒；内存限制：64 MB。",
+  "input_description": "一行一个整数 n。",
+  "output_description": "一个整数，即 F(n) mod 1000000007。",
+  "samples": [
+    {
+      "input": "10",
+      "output": "55"
+    }
+  ],
+  "constraints": "0 ≤ n ≤ 1000。",
+  "testcases": [
+    {
+      "input": "0",
+      "output": "0"
+    },
+    {
+      "input": "1",
+      "output": "1"
+    },
+    {
+      "input": "10",
+      "output": "55"
+    },
+    {
+      "input": "50",
+      "output": "586268941"
+    },
+    {
+      "input": "100",
+      "output": "687995182"
+    }
+  ],
+  "time_limit": 1.0,
+  "memory_limit": 64,
+  "hint": "用递推（迭代）而非递归，避免指数级重复计算；结果对 1e9+7 取模。",
+  "source": "洛谷 P1720",
+  "tags": [
+    "动态规划",
+    "递推",
+    "数学"
+  ],
+  "author": "",
+  "difficulty": "入门"
+}

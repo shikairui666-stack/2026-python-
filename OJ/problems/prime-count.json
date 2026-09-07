@@ -1,0 +1,43 @@
+{
+  "id": "prime-count",
+  "title": "区间素数个数",
+  "description": "给定闭区间 [L, R]，统计该区间内素数的个数。\n\n时间限制：1 秒；内存限制：128 MB。",
+  "input_description": "一行两个整数 L 和 R，用空格分隔。",
+  "output_description": "一个整数，即 [L, R] 内素数的个数。",
+  "samples": [
+    {
+      "input": "1 10",
+      "output": "4"
+    }
+  ],
+  "constraints": "1 ≤ L ≤ R ≤ 10^6。",
+  "testcases": [
+    {
+      "input": "1 10",
+      "output": "4"
+    },
+    {
+      "input": "10 20",
+      "output": "4"
+    },
+    {
+      "input": "2 100",
+      "output": "25"
+    },
+    {
+      "input": "999900 1000000",
+      "output": "8"
+    }
+  ],
+  "time_limit": 1.0,
+  "memory_limit": 128,
+  "hint": "区间上界可达 10^6，建议使用埃氏筛（或欧拉筛）预处理素数再统计。",
+  "source": "洛谷 P1835 简化版",
+  "tags": [
+    "数学",
+    "筛法",
+    "数论"
+  ],
+  "author": "",
+  "difficulty": "普及-"
+}

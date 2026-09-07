@@ -1,0 +1,42 @@
+{
+  "id": "two-sum",
+  "title": "两数之和",
+  "description": "给定一个整数数组和一个目标值 target，找出数组中和为 target 的两个元素，输出它们对应的下标（从 0 开始计数），按从小到大顺序用空格分隔。\n\n题目保证有且仅有一组解。\n\n时间限制：1 秒；内存限制：64 MB。",
+  "input_description": "第一行两个整数 n target，表示数组长度和目标值；\n第二行 n 个整数，为数组元素。",
+  "output_description": "两个整数，用空格分隔，表示和为 target 的两个元素下标（升序）。",
+  "samples": [
+    {
+      "input": "4 9\n2 7 11 15",
+      "output": "0 1"
+    }
+  ],
+  "constraints": "2 ≤ n ≤ 10^5；-10^9 ≤ 数组元素, target ≤ 10^9。",
+  "testcases": [
+    {
+      "input": "4 9\n2 7 11 15",
+      "output": "0 1"
+    },
+    {
+      "input": "3 6\n3 2 4",
+      "output": "1 2"
+    },
+    {
+      "input": "2 0\n-3 3",
+      "output": "0 1"
+    },
+    {
+      "input": "5 9\n1 2 3 4 5",
+      "output": "3 4"
+    }
+  ],
+  "time_limit": 1.0,
+  "memory_limit": 64,
+  "hint": "双层循环枚举所有两两组合，找到和等于 target 的一对即输出。",
+  "source": "LeetCode 1",
+  "tags": [
+    "数组",
+    "枚举"
+  ],
+  "author": "",
+  "difficulty": "入门"
+}

@@ -1,0 +1,46 @@
+{
+  "id": "climbing-stairs",
+  "title": "爬楼梯",
+  "description": "你正在爬一段有 n 阶的楼梯。每次你可以爬 1 阶或 2 阶。问有多少种不同的方法可以爬到楼顶？输出方法数对 1000000007 取模的结果。\n\n时间限制：1 秒；内存限制：64 MB。",
+  "input_description": "一行一个整数 n。",
+  "output_description": "一个整数，即到达第 n 阶的方法数 mod 1000000007。",
+  "samples": [
+    {
+      "input": "2",
+      "output": "2"
+    },
+    {
+      "input": "3",
+      "output": "3"
+    }
+  ],
+  "constraints": "1 ≤ n ≤ 1000。",
+  "testcases": [
+    {
+      "input": "2",
+      "output": "2"
+    },
+    {
+      "input": "3",
+      "output": "3"
+    },
+    {
+      "input": "10",
+      "output": "89"
+    },
+    {
+      "input": "100",
+      "output": "782204094"
+    }
+  ],
+  "time_limit": 1.0,
+  "memory_limit": 64,
+  "hint": "设 f(n) 为方法数，则 f(n) = f(n-1) + f(n-2)；用递推并取模。",
+  "source": "LeetCode 70",
+  "tags": [
+    "动态规划",
+    "递推"
+  ],
+  "author": "",
+  "difficulty": "普及-"
+}

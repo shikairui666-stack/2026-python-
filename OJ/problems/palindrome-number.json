@@ -1,0 +1,50 @@
+{
+  "id": "palindrome-number",
+  "title": "回文数",
+  "description": "判断一个整数是否为回文数。回文数指正序（从左向右）和倒序（从右向左）读都一样的数。\n\n是回文数输出 Yes，否则输出 No。\n\n时间限制：1 秒；内存限制：64 MB。",
+  "input_description": "一行一个整数 x。",
+  "output_description": "是回文数输出 Yes，否则输出 No（注意大小写）。",
+  "samples": [
+    {
+      "input": "121",
+      "output": "Yes"
+    },
+    {
+      "input": "-121",
+      "output": "No"
+    }
+  ],
+  "constraints": "-2^31 ≤ x ≤ 2^31-1。",
+  "testcases": [
+    {
+      "input": "121",
+      "output": "Yes"
+    },
+    {
+      "input": "-121",
+      "output": "No"
+    },
+    {
+      "input": "10",
+      "output": "No"
+    },
+    {
+      "input": "12321",
+      "output": "Yes"
+    },
+    {
+      "input": "1001",
+      "output": "Yes"
+    }
+  ],
+  "time_limit": 1.0,
+  "memory_limit": 64,
+  "hint": "负数一定不是回文；可通过反转数字或转字符串后比较判定。",
+  "source": "LeetCode 9",
+  "tags": [
+    "数学",
+    "字符串"
+  ],
+  "author": "",
+  "difficulty": "入门"
+}

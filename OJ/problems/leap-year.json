@@ -1,0 +1,50 @@
+{
+  "id": "leap-year",
+  "title": "闰年判定",
+  "description": "判断给定的年份是否为闰年。闰年满足以下条件之一：\n1. 能被 4 整除但不能被 100 整除；\n2. 能被 400 整除。\n\n是闰年输出 Yes，否则输出 No。\n\n时间限制：1 秒；内存限制：64 MB。",
+  "input_description": "一行一个整数 year，表示年份。",
+  "output_description": "是闰年输出 Yes，否则输出 No（注意大小写）。",
+  "samples": [
+    {
+      "input": "2000",
+      "output": "Yes"
+    },
+    {
+      "input": "1900",
+      "output": "No"
+    }
+  ],
+  "constraints": "1 ≤ year ≤ 10^9。",
+  "testcases": [
+    {
+      "input": "2000",
+      "output": "Yes"
+    },
+    {
+      "input": "1900",
+      "output": "No"
+    },
+    {
+      "input": "2024",
+      "output": "Yes"
+    },
+    {
+      "input": "2023",
+      "output": "No"
+    },
+    {
+      "input": "2100",
+      "output": "No"
+    }
+  ],
+  "time_limit": 1.0,
+  "memory_limit": 64,
+  "hint": "按条件判断即可，注意 400 与 100 的优先级。",
+  "source": "洛谷 P5711",
+  "tags": [
+    "分支",
+    "数学"
+  ],
+  "author": "",
+  "difficulty": "入门"
+}

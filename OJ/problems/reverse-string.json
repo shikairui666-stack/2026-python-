@@ -1,0 +1,41 @@
+{
+  "id": "reverse-string",
+  "title": "反转字符串",
+  "description": "给定一个不含空格的字符串，将其反转后输出。\n\n时间限制：1 秒；内存限制：64 MB。",
+  "input_description": "一行一个字符串 s（不含空格）。",
+  "output_description": "反转后的字符串。",
+  "samples": [
+    {
+      "input": "hello",
+      "output": "olleh"
+    }
+  ],
+  "constraints": "1 ≤ |s| ≤ 1000，s 仅由大小写字母和数字组成。",
+  "testcases": [
+    {
+      "input": "hello",
+      "output": "olleh"
+    },
+    {
+      "input": "abc",
+      "output": "cba"
+    },
+    {
+      "input": "a",
+      "output": "a"
+    },
+    {
+      "input": "abcdef12345",
+      "output": "54321fedcba"
+    }
+  ],
+  "time_limit": 1.0,
+  "memory_limit": 64,
+  "hint": "使用切片 s[::-1] 或双指针交换。",
+  "source": "LeetCode 344 简化版",
+  "tags": [
+    "字符串"
+  ],
+  "author": "",
+  "difficulty": "入门"
+}

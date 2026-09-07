@@ -1,16 +1,16 @@
 {
   "id": "sum",
-  "title": "A+B",
-  "description": "add",
-  "input_description": "two ints",
-  "output_description": "sum",
+  "title": "A+B Problem",
+  "description": "输入两个整数 a 和 b，输出它们的和。\n\n这是程序设计最经典的入门题，用于熟悉标准输入输出。\n\n时间限制：1 秒；内存限制：64 MB。",
+  "input_description": "一行两个整数 a 和 b，用空格分隔。",
+  "output_description": "一个整数，即 a + b 的值。",
   "samples": [
     {
       "input": "1 2",
       "output": "3"
     }
   ],
-  "constraints": "n/a",
+  "constraints": "|a|, |b| ≤ 10^9，结果在 64 位有符号整数范围内。",
   "testcases": [
     {
       "input": "1 2",
@@ -19,11 +19,25 @@
     {
       "input": "10 20",
       "output": "30"
+    },
+    {
+      "input": "-5 5",
+      "output": "0"
+    },
+    {
+      "input": "1000000000 1000000000",
+      "output": "2000000000"
     }
   ],
-  "hint": "",
-  "source": "",
-  "tags": [],
+  "time_limit": 1.0,
+  "memory_limit": 64,
+  "hint": "直接读入两个整数相加输出即可，注意结果可能超出 32 位 int 范围。",
+  "source": "洛谷 P1001",
+  "tags": [
+    "入门",
+    "输入输出",
+    "数学"
+  ],
   "author": "",
-  "difficulty": ""
+  "difficulty": "入门"
 }

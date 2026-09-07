@@ -1,0 +1,42 @@
+{
+  "id": "max-of-three",
+  "title": "三个数的最大值",
+  "description": "给定三个整数，输出其中的最大值。\n\n时间限制：1 秒；内存限制：64 MB。",
+  "input_description": "一行三个整数 a b c，用空格分隔。",
+  "output_description": "一个整数，即三个数中的最大值。",
+  "samples": [
+    {
+      "input": "1 2 3",
+      "output": "3"
+    }
+  ],
+  "constraints": "-10^9 ≤ a, b, c ≤ 10^9。",
+  "testcases": [
+    {
+      "input": "1 2 3",
+      "output": "3"
+    },
+    {
+      "input": "-5 0 -3",
+      "output": "0"
+    },
+    {
+      "input": "7 7 2",
+      "output": "7"
+    },
+    {
+      "input": "-100 -200 -50",
+      "output": "-50"
+    }
+  ],
+  "time_limit": 1.0,
+  "memory_limit": 64,
+  "hint": "两两比较取较大者。",
+  "source": "洛谷 P1000 变体",
+  "tags": [
+    "分支",
+    "入门"
+  ],
+  "author": "",
+  "difficulty": "入门"
+}

@@ -1,0 +1,42 @@
+{
+  "id": "sum-1-to-n",
+  "title": "等差数列求和",
+  "description": "求 1 + 2 + ... + n 的和。\n\n时间限制：1 秒；内存限制：64 MB。",
+  "input_description": "一行一个整数 n。",
+  "output_description": "一个整数，即 1 到 n 的和。",
+  "samples": [
+    {
+      "input": "10",
+      "output": "55"
+    }
+  ],
+  "constraints": "1 ≤ n ≤ 10^9。",
+  "testcases": [
+    {
+      "input": "1",
+      "output": "1"
+    },
+    {
+      "input": "10",
+      "output": "55"
+    },
+    {
+      "input": "100",
+      "output": "5050"
+    },
+    {
+      "input": "1000000000",
+      "output": "500000000500000000"
+    }
+  ],
+  "time_limit": 1.0,
+  "memory_limit": 64,
+  "hint": "n 最大 10^9，直接循环会超时，使用求和公式 n(n+1)/2（注意用 64 位整数）。",
+  "source": "洛谷 P5720 变体",
+  "tags": [
+    "数学",
+    "公式"
+  ],
+  "author": "",
+  "difficulty": "入门"
+}

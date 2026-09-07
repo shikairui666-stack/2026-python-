@@ -1,0 +1,50 @@
+{
+  "id": "reverse-integer",
+  "title": "整数反转",
+  "description": "给定一个 32 位有符号整数 x，将其各位数字反转后输出。\n\n如果反转后的整数超出 32 位有符号整数范围 [-2^31, 2^31-1]，则输出 0。\n\n时间限制：1 秒；内存限制：64 MB。",
+  "input_description": "一行一个整数 x。",
+  "output_description": "反转后的整数；若溢出则输出 0。",
+  "samples": [
+    {
+      "input": "123",
+      "output": "321"
+    },
+    {
+      "input": "-123",
+      "output": "-321"
+    }
+  ],
+  "constraints": "-2^31 ≤ x ≤ 2^31-1，即 -2147483648 ≤ x ≤ 2147483647。",
+  "testcases": [
+    {
+      "input": "123",
+      "output": "321"
+    },
+    {
+      "input": "-123",
+      "output": "-321"
+    },
+    {
+      "input": "120",
+      "output": "21"
+    },
+    {
+      "input": "1534236469",
+      "output": "0"
+    },
+    {
+      "input": "0",
+      "output": "0"
+    }
+  ],
+  "time_limit": 1.0,
+  "memory_limit": 64,
+  "hint": "反转时注意保留符号；判断结果是否超出 int 范围。",
+  "source": "LeetCode 7",
+  "tags": [
+    "数学",
+    "模拟"
+  ],
+  "author": "",
+  "difficulty": "入门"
+}

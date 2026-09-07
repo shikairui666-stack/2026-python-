@@ -1,0 +1,42 @@
+{
+  "id": "gcd-lcm",
+  "title": "最大公约数与最小公倍数",
+  "description": "给定两个正整数 a 和 b，求它们的最大公约数 gcd(a, b) 和最小公倍数 lcm(a, b)。\n\n时间限制：1 秒；内存限制：64 MB。",
+  "input_description": "一行两个整数 a 和 b，用空格分隔。",
+  "output_description": "一行两个整数，用空格分隔，依次为 gcd 和 lcm。",
+  "samples": [
+    {
+      "input": "12 18",
+      "output": "6 36"
+    }
+  ],
+  "constraints": "1 ≤ a, b ≤ 10^9。",
+  "testcases": [
+    {
+      "input": "12 18",
+      "output": "6 36"
+    },
+    {
+      "input": "17 23",
+      "output": "1 391"
+    },
+    {
+      "input": "100 25",
+      "output": "25 100"
+    },
+    {
+      "input": "123456 7890",
+      "output": "6 2537640"
+    }
+  ],
+  "time_limit": 1.0,
+  "memory_limit": 64,
+  "hint": "用辗转相除法（欧几里得算法）求 gcd；lcm = a / gcd * b。",
+  "source": "洛谷 P1029 简化版",
+  "tags": [
+    "数学",
+    "数论"
+  ],
+  "author": "",
+  "difficulty": "入门"
+}

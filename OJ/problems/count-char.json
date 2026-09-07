@@ -1,0 +1,42 @@
+{
+  "id": "count-char",
+  "title": "统计字符个数",
+  "description": "给定一个字符串 s 和一个字符 c，统计 c 在 s 中出现的次数。\n\n时间限制：1 秒；内存限制：64 MB。",
+  "input_description": "第一行一个字符串 s；第二行一个字符 c。",
+  "output_description": "一个整数，即 c 在 s 中出现的次数。",
+  "samples": [
+    {
+      "input": "hello\nl",
+      "output": "2"
+    }
+  ],
+  "constraints": "1 ≤ |s| ≤ 10^5，s 由小写字母组成，c 为单个小写字母。",
+  "testcases": [
+    {
+      "input": "hello\nl",
+      "output": "2"
+    },
+    {
+      "input": "banana\na",
+      "output": "3"
+    },
+    {
+      "input": "xyz\nz",
+      "output": "1"
+    },
+    {
+      "input": "aaaaa\na",
+      "output": "5"
+    }
+  ],
+  "time_limit": 1.0,
+  "memory_limit": 64,
+  "hint": "遍历字符串统计，或使用 count 方法。",
+  "source": "洛谷 P1308 简化版",
+  "tags": [
+    "字符串",
+    "计数"
+  ],
+  "author": "",
+  "difficulty": "入门"
+}

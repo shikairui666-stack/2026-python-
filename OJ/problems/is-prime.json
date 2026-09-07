@@ -1,0 +1,50 @@
+{
+  "id": "is-prime",
+  "title": "素数判定",
+  "description": "判断一个整数 n 是否为素数（质数）。若 n 是素数输出 Yes，否则输出 No。\n\n时间限制：1 秒；内存限制：64 MB。",
+  "input_description": "一行一个整数 n。",
+  "output_description": "是素数输出 Yes，否则输出 No（注意大小写）。",
+  "samples": [
+    {
+      "input": "17",
+      "output": "Yes"
+    },
+    {
+      "input": "100",
+      "output": "No"
+    }
+  ],
+  "constraints": "2 ≤ n ≤ 10^9。",
+  "testcases": [
+    {
+      "input": "2",
+      "output": "Yes"
+    },
+    {
+      "input": "17",
+      "output": "Yes"
+    },
+    {
+      "input": "100",
+      "output": "No"
+    },
+    {
+      "input": "999983",
+      "output": "Yes"
+    },
+    {
+      "input": "1000000007",
+      "output": "Yes"
+    }
+  ],
+  "time_limit": 1.0,
+  "memory_limit": 64,
+  "hint": "从 2 试除到 sqrt(n) 即可，不要遍历到 n，否则会超时。",
+  "source": "洛谷 P1035 变体",
+  "tags": [
+    "数学",
+    "数论"
+  ],
+  "author": "",
+  "difficulty": "普及-"
+}
