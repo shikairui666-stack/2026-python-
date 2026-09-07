@@ -43,6 +43,7 @@ LANGUAGES_FILE = BASE_DIR / "languages.json"
 USERS_FILE = BASE_DIR / "users.json"
 VISIBILITY_FILE = BASE_DIR / "visibility.json"
 MODEL_CONFIG_FILE = BASE_DIR / "model_config.json"
+SUBMISSIONS_FILE = BASE_DIR / "submissions.json"
 
 app = FastAPI(title="Online Judge", version="0.5.0")
 
@@ -408,6 +409,28 @@ def _new_submission_id() -> str:
     return str(next(_submission_counter))
 
 
+def _save_submissions() -> None:
+    """提交记录持久化到 submissions.json（重启后端后仍可查看历史提交）"""
+    with open(SUBMISSIONS_FILE, "w", encoding="utf-8") as f:
+        json.dump(SUBMISSIONS, f, ensure_ascii=False, indent=2)
+
+
+def _load_submissions() -> None:
+    """启动时加载历史提交，并恢复提交 id 计数器，避免重启后 id 冲突"""
+    global SUBMISSIONS, _submission_counter
+    SUBMISSIONS = {}
+    if SUBMISSIONS_FILE.exists():
+        try:
+            SUBMISSIONS = json.loads(SUBMISSIONS_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            SUBMISSIONS = {}
+    max_id = 0
+    for sid in SUBMISSIONS:
+        if sid.isdigit():
+            max_id = max(max_id, int(sid))
+    _submission_counter = itertools.count(max_id + 1)
+
+
 # --------------------------------------------------------------------------- #
 # 评测日志与审计（Step 5）
 # --------------------------------------------------------------------------- #
@@ -619,6 +642,7 @@ async def _judge_submission(submission_id: str) -> None:
                    compile_info=None, run_info=None, details=[])
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
+        _save_submissions()
 
 
 # --------------------------------------------------------------------------- #
@@ -1012,6 +1036,7 @@ async def submit(payload: dict = Body(...), request: Request = None):
     # 统计：提交数 +1
     user["submit_count"] = user.get("submit_count", 0) + 1
     _save_users()
+    _save_submissions()
     asyncio.create_task(_judge_submission(submission_id))
     return ok({"submission_id": submission_id, "status": "pending"})
 
@@ -1130,6 +1155,7 @@ async def rejudge(submission_id: str, request: Request = None):
         return fail(404, "submission not found")
     sub.update(status="pending", score=None, counts=None, compile_info=None,
                run_info=None, error_info=None, details=[])
+    _save_submissions()
     asyncio.create_task(_judge_submission(submission_id))
     return ok({"submission_id": submission_id, "status": "pending"}, "rejudge started")
 
@@ -1654,6 +1680,7 @@ _load_languages()
 _load_users()
 _load_visibility()
 _load_model_config()
+_load_submissions()
 
 if __name__ == "__main__":
     import uvicorn
