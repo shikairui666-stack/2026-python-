@@ -147,8 +147,7 @@ def download_image(img_url,save_path):
     except Exception as e:
         print(f"[图片] {save_path} 下载失败: {e}")
 
-#main函数
-create_folders()
+# 歌手 id 列表（供 main() 使用）
 singer_ids=[
     6452,#周杰伦
     3684,#林俊杰
@@ -273,33 +272,39 @@ def save_data():
     except Exception as e:
         print(f"保存但是失败: {e}")
 
-for singer_id in test_singer_ids:
-    singer=get_artist_info(singer_id)
-    if singer==None:
-        continue
-    else:
-        touxiang_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","singer_head",str(singer_id)+".jpg")
-        download_image(singer["picurl"], touxiang_path)
-        singer["local_avatar"]=touxiang_path
-        gequ_list=get_artist_songs(singer_id,limit=25)#歌手歌曲列表不能用html，网易云前端js渲染
-        for gequ in gequ_list:
-            info=get_song_info_html(gequ["id"])  #HTML抓取为主，只有歌曲详情可以用html
-            if info:
-                #网页缺失时回退API
-                gequ["name"]=info["name"] or gequ.get("name","")
-                gequ["artist_name"]=info["artist_name"] or gequ.get("artist_name","")
-                gequ["album"]=info["album"] or gequ.get("album","")
-                gequ["cover"]=info["cover"] or gequ.get("cover","")
-            lrc=get_lyrics(gequ["id"])  #歌词为API爬取，同理
-            gequ["lyric"]=lrc
-            lrc_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","lyrics",str(gequ["id"])+"_"+safe_filename(gequ["name"])+".txt")
-            with open(lrc_path,"w",encoding="utf-8") as f:
-                f.write(lrc)
-            fengmian_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","images",str(gequ["id"])+".jpg")
-            download_image(gequ["cover"],fengmian_path)
-            gequ["local_cover"]=fengmian_path
-            gequ["artist_detail"]=singer
-            total_songs.append(gequ)
-            time.sleep(random.uniform(3,6))
-        time.sleep(random.uniform(10,15))
-        save_data()
+def main():
+    create_folders()
+    for singer_id in test_singer_ids:
+        singer=get_artist_info(singer_id)
+        if singer==None:
+            continue
+        else:
+            touxiang_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","singer_head",str(singer_id)+".jpg")
+            download_image(singer["picurl"], touxiang_path)
+            singer["local_avatar"]=touxiang_path
+            gequ_list=get_artist_songs(singer_id,limit=25)#歌手歌曲列表不能用html，网易云前端js渲染
+            for gequ in gequ_list:
+                info=get_song_info_html(gequ["id"])  #HTML抓取为主，只有歌曲详情可以用html
+                if info:
+                    #网页缺失时回退API
+                    gequ["name"]=info["name"] or gequ.get("name","")
+                    gequ["artist_name"]=info["artist_name"] or gequ.get("artist_name","")
+                    gequ["album"]=info["album"] or gequ.get("album","")
+                    gequ["cover"]=info["cover"] or gequ.get("cover","")
+                lrc=get_lyrics(gequ["id"])  #歌词为API爬取，同理
+                gequ["lyric"]=lrc
+                lrc_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","lyrics",str(gequ["id"])+"_"+safe_filename(gequ["name"])+".txt")
+                with open(lrc_path,"w",encoding="utf-8") as f:
+                    f.write(lrc)
+                fengmian_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"music_data","images",str(gequ["id"])+".jpg")
+                download_image(gequ["cover"],fengmian_path)
+                gequ["local_cover"]=fengmian_path
+                gequ["artist_detail"]=singer
+                total_songs.append(gequ)
+                time.sleep(random.uniform(3,6))
+            time.sleep(random.uniform(10,15))
+            save_data()
+
+
+if __name__ == "__main__":
+    main()

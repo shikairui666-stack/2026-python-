@@ -1,12 +1,25 @@
 # Python 缓存
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 
 # 虚拟环境
 .venv/
+venv/
+env/
 
-# 数据库（本地数据，不该进版本库）
+# 数据库（本地数据，不进版本库）
 db.sqlite3
+*.sqlite3
 
-# 爬虫下载的大文件（2.6G，有 json 即可，不必提交）
+# 爬虫下载的大文件（约 2.6G 图片/歌词，需要数据时重新运行爬虫即可）
 music_data/
+
+# 运行时日志
+*.log
+server.log
+
+# 系统 / 编辑器
+.DS_Store
+Thumbs.db
+.idea/
