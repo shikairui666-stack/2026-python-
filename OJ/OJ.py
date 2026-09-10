@@ -1,15 +1,22 @@
 """
 Online Judge 系统 —— Step 1-6 基础模块（题目/评测/用户/日志/前端）+ Advance AI 智能命题
 
-- 使用 FastAPI 的异步接口（async def）实现，评测通过 asyncio.create_task 异步执行
-- 题目配置以 JSON 文件形式存入本地 problems/ 目录，每题一个文件
-- 语言配置默认内置 python / cpp，支持动态注册，持久化到 languages.json
-- 用户持久化到 users.json，会话基于 Cookie Session（session id 存内存）；启动自动创建管理员 admin / admintestpassword
-- 评测日志按 submission_id 记录（内存），支持按提交查询；日志可见性受角色 + 题目公开开关控制
-- 日志访问操作写入审计记录，管理员可查询审计日志
-- 所有响应统一为 {code, msg, data} 结构，HTTP 状态码与 code 一致
-"""
+================================================================================
+文件结构导航（自上而下，同类功能已集中，按小节名可直接定位）
+================================================================================
+[数据层]  基础配置 · 统一响应 · 题目字段与校验 · 题目存储读写 · 语言 · 用户与鉴权
+          提交与评测 · 评测日志与审计 · 评测执行引擎
+[路由层]  题目管理 · 语言管理 · 用户与鉴权 · 提交评测 · 评测列表/重测
+          评测日志/权限 · 系统管理
+[Advance] AI 智能命题（模型配置 + 流式生成 + 中断 + Token 计价）
+[启动]    加载持久化数据 → uvicorn 监听 127.0.0.1:8000
 
+关键约定
+- 评测通过 asyncio.create_task 异步执行，避免阻塞接口响应
+- 题目/语言/用户/提交分别持久化到 problems/、languages.json、users.json、submissions.json
+- 所有响应统一为 {code, msg, data} 结构，HTTP 状态码与 code 一致
+- 错误优先级：401 未登录 > 403 权限 > 400 参数 > 429 限流 > 409 冲突 > 404 不存在
+"""
 import asyncio
 import bcrypt
 import collections
@@ -168,6 +175,7 @@ def _problem_path(problem_id: str) -> Path:
 
 
 def load_problem(problem_id: str) -> dict | None:
+    """读取某题配置；文件不存在或 JSON 损坏时返回 None"""
     path = _problem_path(problem_id)
     if not path.exists():
         return None
@@ -179,6 +187,7 @@ def load_problem(problem_id: str) -> dict | None:
 
 
 def save_problem(problem: dict) -> None:
+    """把题目写入 problems/{id}.json（目录不存在则先创建）"""
     PROBLEMS_DIR.mkdir(parents=True, exist_ok=True)
     with open(_problem_path(problem["id"]), "w", encoding="utf-8") as f:
         json.dump(problem, f, ensure_ascii=False, indent=2)
@@ -218,6 +227,7 @@ _languages: dict[str, dict] = {}
 
 
 def _load_languages() -> None:
+    """从 languages.json 加载语言表，读取失败时回退到内置默认语言"""
     global _languages
     _languages = {k: dict(v) for k, v in DEFAULT_LANGUAGES.items()}
     if LANGUAGES_FILE.exists():
@@ -231,6 +241,7 @@ def _load_languages() -> None:
 
 
 def _save_languages() -> None:
+    """把当前语言表写回 languages.json"""
     with open(LANGUAGES_FILE, "w", encoding="utf-8") as f:
         json.dump(_languages, f, ensure_ascii=False, indent=2)
 
@@ -302,6 +313,7 @@ def _verify_password(password: str, stored_hash: str) -> bool:
 
 
 def _next_user_id() -> str:
+    """生成下一个数字型 user_id（当前最大 id + 1，无用户时从 1 开始）"""
     max_id = 0
     for uid in _users:
         if uid.isdigit():
@@ -310,11 +322,13 @@ def _next_user_id() -> str:
 
 
 def _save_users() -> None:
+    """把用户表写回 users.json"""
     with open(USERS_FILE, "w", encoding="utf-8") as f:
         json.dump(_users, f, ensure_ascii=False, indent=2)
 
 
 def _load_users() -> None:
+    """从 users.json 加载用户，补齐旧数据字段并确保初始管理员存在"""
     global _users
     _users = {}
     if USERS_FILE.exists():
@@ -343,7 +357,6 @@ def _load_users() -> None:
         }
         _save_users()
 
-
 def _public_user(u: dict) -> dict:
     """用户对外信息（不含密码、resolved 等内部字段）"""
     return {
@@ -354,7 +367,6 @@ def _public_user(u: dict) -> dict:
         "submit_count": u.get("submit_count", 0),
         "resolve_count": u.get("resolve_count", 0),
     }
-
 
 def _mark_resolved(user_id: str, problem_id: str) -> None:
     """某用户首次完全通过某题时，通过数 +1（按题目去重）"""
@@ -367,7 +379,6 @@ def _mark_resolved(user_id: str, problem_id: str) -> None:
         u["resolve_count"] = u.get("resolve_count", 0) + 1
         _save_users()
 
-
 def get_current_user(request: Request) -> dict | None:
     """从 Cookie 中的 session id 解析当前登录用户"""
     token = request.cookies.get(SESSION_COOKIE)
@@ -375,7 +386,6 @@ def get_current_user(request: Request) -> dict | None:
         return None
     uid = _sessions.get(token)
     return _users.get(uid) if uid else None
-
 
 def _require_user(request: Request) -> tuple[dict | None, JSONResponse | None]:
     """要求登录。返回 (user, None) 或 (None, 错误响应)。"""
@@ -386,7 +396,6 @@ def _require_user(request: Request) -> tuple[dict | None, JSONResponse | None]:
         return None, fail(403, "用户被禁用")
     return user, None
 
-
 def _require_admin(request: Request) -> tuple[dict | None, JSONResponse | None]:
     """要求管理员。返回 (user, None) 或 (None, 错误响应)。"""
     user, err = _require_user(request)
@@ -395,7 +404,6 @@ def _require_admin(request: Request) -> tuple[dict | None, JSONResponse | None]:
     if user.get("role") != "admin":
         return None, fail(403, "权限不足")
     return user, None
-
 
 # --------------------------------------------------------------------------- #
 # 提交与评测
@@ -406,6 +414,7 @@ _submit_times: dict[str, collections.deque] = {}  # user_id -> 提交时间队�
 
 
 def _new_submission_id() -> str:
+    """生成递增的 submission_id"""
     return str(next(_submission_counter))
 
 
@@ -451,6 +460,7 @@ def _append_log(submission_id: str, level: str, stage: str, message: str) -> Non
 
 
 def _load_visibility() -> None:
+    """从 visibility.json 加载题目日志公开开关（public_cases），失败时置空"""
     global _visibility
     _visibility = {}
     if VISIBILITY_FILE.exists():
@@ -461,6 +471,7 @@ def _load_visibility() -> None:
 
 
 def _save_visibility() -> None:
+    """把题目日志公开开关写回 visibility.json"""
     with open(VISIBILITY_FILE, "w", encoding="utf-8") as f:
         json.dump(_visibility, f, ensure_ascii=False, indent=2)
 
@@ -481,6 +492,9 @@ def _append_access_audit(user_id: str, problem_id: str, status: str) -> None:
     })
 
 
+# --------------------------------------------------------------------------- #
+# 评测执行引擎：编译 / 运行 / 输出比对 / 内存统计（真正跑用户代码的地方）
+# --------------------------------------------------------------------------- #
 def _build_command(template: str, src: Path, exe: Path) -> list[str]:
     """将命令模板中的 {src}/{exe} 替换为实际路径并拆分。统一用正斜杠避免 Windows 转义问题。"""
     def _p(p: Path) -> str:
@@ -505,6 +519,7 @@ def _normalize_output(s: str) -> list[str]:
 
 
 def _is_mle(returncode: int | None, stderr: str) -> bool:
+    """判断是否内存超限（MLE）：stderr 含内存相关关键字，或进程被 OOM 杀手杀死（退出码 -9）"""
     low = (stderr or "").lower()
     for kw in ("memoryerror", "bad_alloc", "out of memory", "cannot allocate", "memory limit"):
         if kw in low:
@@ -667,8 +682,8 @@ async def list_problems(request: Request = None):
 
 @app.post("/api/problems/")
 async def add_problem(payload: dict = Body(...), request: Request = None):
-    """添加题目：校验字段完整性，保存到存储目录（需登录）"""
-    user, err = _require_user(request)
+    """添加题目：校验字段完整性，保存到存储目录（仅管理员）"""
+    user, err = _require_admin(request)
     if err is not None:
         return err
     try:
@@ -695,8 +710,8 @@ async def get_problem(problem_id: str, request: Request = None):
 
 @app.put("/api/problems/{problem_id}")
 async def edit_problem(problem_id: str, payload: dict = Body(...), request: Request = None):
-    """编辑题目：校验完整配置并覆盖原题目内容（需登录）"""
-    user, err = _require_user(request)
+    """编辑题目：校验完整配置并覆盖原题目内容（仅管理员）"""
+    user, err = _require_admin(request)
     if err is not None:
         return err
     try:
@@ -1245,9 +1260,13 @@ async def list_log_access(user_id: str | None = None, problem_id: str | None = N
     return ok(items)
 
 
+# --------------------------------------------------------------------------- #
+# 接口：系统管理
+# --------------------------------------------------------------------------- #
 @app.post("/api/reset/")
 async def reset_system(request: Request = None):
     """系统重置：清空用户/题目/提交/日志/审计/可见性，退出登录，重建初始管理员（仅管理员）。"""
+
     _, err = _require_admin(request)
     if err is not None:
         return err
@@ -1285,6 +1304,7 @@ _ai_task_counter = itertools.count(1)
 
 
 def _load_model_config() -> None:
+    """从 model_config.json 加载模型配置，失败时置空"""
     global _model_config
     _model_config = {}
     if MODEL_CONFIG_FILE.exists():
@@ -1295,6 +1315,7 @@ def _load_model_config() -> None:
 
 
 def _save_model_config() -> None:
+    """把模型配置写回 model_config.json（api_key 仅存本地，不对外返回）"""
     with open(MODEL_CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(_model_config, f, ensure_ascii=False, indent=2)
 
@@ -1312,6 +1333,7 @@ def _safe_model_config() -> dict:
 
 
 def _new_ai_task_id() -> str:
+    """生成 ai-task-N 形式的任务 id"""
     return f"ai-task-{next(_ai_task_counter)}"
 
 

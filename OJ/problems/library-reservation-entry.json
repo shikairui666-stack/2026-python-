@@ -1,0 +1,51 @@
+{
+  "id": "library-reservation-entry",
+  "title": "图书馆预约入场检查",
+  "description": "学校图书馆实行预约入场制度。给出具有预约资格的学生编号和一系列入场请求，请对每条请求判断属于以下哪种情况：\n1. 正常入场：该学生有预约资格且第一次入场；\n2. 重复入场：该学生有预约资格但已经入场过；\n3. 无预约：该学生没有预约资格。\n预约资格名单中的学生编号互不相同。",
+  "input_description": "第一行两个整数 n 和 m，分别表示预约资格学生数和入场请求数。\n第二行 n 个互不相同的整数，表示预约资格名单中的学生编号。\n接下来 m 行，每行一个整数，表示一次入场请求的学生编号。\n若 m=0，则没有后续请求。",
+  "output_description": "对每条入场请求输出一行：\n有预约资格且第一次入场输出 Welcome；\n有预约资格但已经入场过输出 Already entered；\n没有预约资格输出 No reservation。",
+  "samples": [
+    {
+      "input": "5 6\n1001 1002 1003 1004 1005\n1002\n1006\n1002\n1001\n1005\n1005",
+      "output": "Welcome\nNo reservation\nAlready entered\nWelcome\nWelcome\nAlready entered"
+    }
+  ],
+  "constraints": "1 ≤ n ≤ 200000，0 ≤ m ≤ 200000。\n学生编号为 1 到 10^9 之间的整数。\n预约资格名单中学生编号互不相同。\n使用每次遍历预约名单的算法可能会超时，建议使用集合或字典。",
+  "testcases": [
+    {
+      "input": "5 6\n1001 1002 1003 1004 1005\n1002\n1006\n1002\n1001\n1005\n1005",
+      "output": "Welcome\nNo reservation\nAlready entered\nWelcome\nWelcome\nAlready entered"
+    },
+    {
+      "input": "3 0\n101 102 103",
+      "output": ""
+    },
+    {
+      "input": "1 1\n42\n42",
+      "output": "Welcome"
+    },
+    {
+      "input": "1 2\n42\n42\n42",
+      "output": "Welcome\nAlready entered"
+    },
+    {
+      "input": "1 1\n42\n100",
+      "output": "No reservation"
+    },
+    {
+      "input": "10 12\n1 2 3 4 5 6 7 8 9 10\n5\n11\n5\n12\n1\n100\n1\n10\n3\n3\n9\n2",
+      "output": "Welcome\nNo reservation\nAlready entered\nNo reservation\nWelcome\nNo reservation\nAlready entered\nWelcome\nWelcome\nAlready entered\nWelcome\nWelcome"
+    }
+  ],
+  "hint": "将预约资格名单存入集合（set）中，另用一个集合或字典记录已经入场的学生。每条请求先在预约集合中查询，再检查是否已入场。这样每条请求平均 O(1)。若每来一个请求都遍历预约名单，总复杂度为 O(nm)，在最大数据规模下会超时。",
+  "source": "原创",
+  "tags": [
+    "集合",
+    "哈希表",
+    "模拟"
+  ],
+  "time_limit": 1.0,
+  "memory_limit": 256,
+  "author": "OJ命题组",
+  "difficulty": "简单"
+}
